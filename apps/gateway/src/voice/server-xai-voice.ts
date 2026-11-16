@@ -1,4 +1,5 @@
 import { INTERRUPTION_KEYTERMS, type GatewayEnv } from '@twring/config/gateway';
+import type { SpeakerLanguage } from '@twring/contracts';
 
 import type { TtsRouter } from '../agents/tts-router';
 import { DEEPGRAM_VOICES, cartesiaVoice, xaiVoice } from '../agents/voices';
@@ -33,11 +34,11 @@ export interface ServerXaiVoiceOptions {
   createTts?: (options: XaiTtsOptions) => TtsProvider;
   /**
    * The person's own Deepgram/Cartesia keys and the server's Cartesia key: Deepgram listening on
-   * an own Deepgram key, and voices spoken exactly (`forSample`) on the key `speech` names.
+   * an own Deepgram key, and voices spoken exactly (`forCallVoice`) on the key `speech` names.
    */
   ownKeys?: {
     stt: (keyterms: readonly string[], agentName?: string, speech?: ResolvedSpeech) => SttProvider;
-    tts: Pick<TtsRouter, 'forSample'>;
+    tts: Pick<TtsRouter, 'forCallVoice'>;
   };
   logger?: { warn(fields: object, message: string): void };
 }
@@ -92,6 +93,7 @@ export function serverXaiCallVoice(options: ServerXaiVoiceOptions): ServerCallVo
     stt({
       apiKey: listenKeyFor(speech),
       keyterms,
+      ...(speech?.language !== undefined && { language: speech.language }),
       endpointingMs: options.stt.endpointingMs,
       ...(options.stt.smartTurn !== undefined && { smartTurn: options.stt.smartTurn }),
       ...(options.stt.smartTurnTimeoutMs !== undefined && {
@@ -102,12 +104,13 @@ export function serverXaiCallVoice(options: ServerXaiVoiceOptions): ServerCallVo
     tts({
       apiKey: keyFor(speech),
       voice: (voiceId === undefined ? undefined : xaiVoice(voiceId)) ?? SERVER_XAI_DEFAULT_VOICE,
+      ...(speech?.language !== undefined && { language: speech.language }),
     });
   const own = options.ownKeys;
   const speakFor = (voiceId: string, speech?: ResolvedSpeech): TtsProvider => {
     const side = own === undefined ? 'xai' : serverXaiTtsSide(voiceId, speech);
     if (side === 'xai' || own === undefined) return speak(voiceId, speech);
-    const provider = own.tts.forSample(voiceId, speech);
+    const provider = own.tts.forCallVoice(voiceId, speech);
     if (provider === undefined) return speak(voiceId, speech);
     // The person's own key never fails over; the server's Cartesia key falls back to Eve.
     if (speech?.[side]?.source === 'own') return provider;
@@ -144,6 +147,7 @@ type DeepgramNoteTranscriber = (
   signal?: AbortSignal,
   keyterms?: readonly string[],
   apiKey?: string,
+  language?: SpeakerLanguage,
 ) => Promise<string>;
 
 /**
@@ -151,10 +155,10 @@ type DeepgramNoteTranscriber = (
  * Deepgram listening choice); without one the note fails as a server failure, never as theirs.
  */
 export function ownDeepgramKeyOnly(transcribe: DeepgramNoteTranscriber): DeepgramNoteTranscriber {
-  return (audio, contentType, signal, keyterms, apiKey) =>
+  return (audio, contentType, signal, keyterms, apiKey, language) =>
     apiKey === undefined
       ? Promise.reject(new PrerecordedTranscriptionError('provider_failure'))
-      : transcribe(audio, contentType, signal, keyterms, apiKey);
+      : transcribe(audio, contentType, signal, keyterms, apiKey, language);
 }
 
 /**

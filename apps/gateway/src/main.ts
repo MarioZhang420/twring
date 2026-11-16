@@ -50,6 +50,7 @@ import {
   serverXaiSampleRouter,
 } from './voice/server-xai-voice';
 import { createSpeechResolver, type ResolvedSpeech } from './voice/speech-resolver';
+import { LanguageRepository, languageRecordSchema } from './language/store';
 import { toSafeError } from './redact';
 import { AppleSignInRevoker } from './apple-signin';
 import { RefusalCounter, refusalRowSchema } from './calls/refusal-counter';
@@ -287,8 +288,13 @@ const sharedAgents =
       )
     : undefined;
 // Whose speech keys each person's calls, voice notes, Listen and samples use (BYOK).
+// The language each person speaks (ADR-036); absent or unreadable means English.
+const languages = new LanguageRepository(
+  new JsonFileCollection(join(env.CORD_DATA_DIR, 'languages.json'), languageRecordSchema),
+);
 const speechResolver = createSpeechResolver({
   enabled: env.SPEECH_KEYS_ENABLED,
+  languageFor: (userId) => languages.get(userId),
   ...(stores && { vault: stores.speechKeys }),
   ...(deepgram && { deepgram }),
   ...(cartesia && { cartesia }),
@@ -738,6 +744,7 @@ const app = buildApp({
         readRatePerMinute: env.THREAD_READ_RATE_PER_MINUTE,
         messagesPerDay: env.THREAD_MESSAGES_PER_DAY,
         ...(voiceNotes && { transcribeVoiceNote: voiceNotes }),
+        ...(!ownSpeech && { languageFor: (userId: string) => languages.get(userId) }),
         // A person's own keys (BYOK), including xAI listening on their own xAI key, and the
         // server's own xAI key on a self-hosted server without Deepgram.
         ...(ownSpeech && {
@@ -799,6 +806,7 @@ const app = buildApp({
     claimRatePerMinute: env.CONNECTOR_CLAIM_RATE_PER_MINUTE,
     socketRatePerMinute: env.CONNECTOR_SOCKET_RATE_PER_MINUTE,
   },
+  language: { store: languages, writeRatePerMinute: env.AGENT_WRITE_RATE_PER_MINUTE },
   ring: {
     stores: ringStores,
     service: ringService,

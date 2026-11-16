@@ -1,3 +1,5 @@
+import type { SpeakerLanguage } from '@twring/contracts';
+
 import { createCartesiaTts, type CartesiaTtsOptions } from '../voice/cartesia-tts';
 import { createDeepgramTts, type DeepgramTtsOptions } from '../voice/deepgram-tts';
 import { createFailoverTts } from '../voice/failover-tts';
@@ -33,6 +35,11 @@ export interface TtsRouter {
    * from `speech` when given (a person's own key for a voice the server cannot make).
    */
   forSample(voiceId: string, speech?: ResolvedSpeech): TtsProvider | undefined;
+  /**
+   * Exactly that voice for a call, in the person's language, or undefined when it cannot be
+   * spoken. For a caller that picks its own fallback (a server on its own xAI key).
+   */
+  forCallVoice(voiceId: string, speech?: ResolvedSpeech): TtsProvider | undefined;
 }
 
 /** Picks the provider by voice id (ADR-020). Provider choice stays here, out of the pipeline. */
@@ -47,14 +54,20 @@ export function createTtsRouter(options: TtsRouterOptions): TtsRouter {
     ...(options.cartesia && { cartesia: options.cartesia.apiKey }),
   };
   const cartesiaSettings = options.cartesia ?? options.cartesiaDefaults;
-  const exact = (voiceId: string, keys: Keys = serverKeys): TtsProvider | undefined => {
+  const exact = (
+    voiceId: string,
+    keys: Keys = serverKeys,
+    language?: SpeakerLanguage,
+  ): TtsProvider | undefined => {
     if (DEEPGRAM_VOICES.some((voice) => voice.id === voiceId)) {
       return deepgram({ apiKey: keys.deepgram, model: voiceId });
     }
     const grok = xaiVoice(voiceId);
     // Grok voices exist only on the person's own xAI key; without one there is no provider.
     if (grok !== undefined) {
-      return keys.xai === undefined ? undefined : xai({ apiKey: keys.xai, voice: grok });
+      return keys.xai === undefined
+        ? undefined
+        : xai({ apiKey: keys.xai, voice: grok, ...(language !== undefined && { language }) });
     }
     const voice = cartesiaVoice(voiceId);
     if (voice === undefined || keys.cartesia === undefined || cartesiaSettings === undefined) {
@@ -64,6 +77,7 @@ export function createTtsRouter(options: TtsRouterOptions): TtsRouter {
       apiKey: keys.cartesia,
       model: cartesiaSettings.ttsModel,
       voice,
+      ...(language !== undefined && { language }),
       ...(cartesiaSettings.ttsSpeed !== undefined && { speed: cartesiaSettings.ttsSpeed }),
     });
   };
@@ -75,11 +89,21 @@ export function createTtsRouter(options: TtsRouterOptions): TtsRouter {
     ...(speech?.xai && { xai: speech.xai.apiKey }),
   });
   return {
-    forCall(voiceId, speech) {
+    forCall(requestedVoiceId, speech) {
       const keys = keysFor(speech);
+      const language = speech?.language;
+      const canCartesia = keys.cartesia !== undefined && cartesiaSettings !== undefined;
+      // Deepgram voices speak English only (ADR-036): a non-English speaker hears the default
+      // Cartesia voice instead when Cartesia can speak, else the Deepgram voice as before.
+      const voiceId =
+        language !== undefined &&
+        canCartesia &&
+        DEEPGRAM_VOICES.some((voice) => voice.id === requestedVoiceId)
+          ? CARTESIA_DEFAULT_VOICE_ID
+          : requestedVoiceId;
       const defaultDeepgram = () =>
         deepgram({ apiKey: keys.deepgram, model: options.deepgram.ttsModel });
-      const provider = exact(voiceId, keys);
+      const provider = exact(voiceId, keys, language);
       if (provider !== undefined) {
         // The person's own xAI key is the only xAI key: a Grok voice never fails over.
         if (xaiVoice(voiceId) !== undefined) return provider;
@@ -88,8 +112,8 @@ export function createTtsRouter(options: TtsRouterOptions): TtsRouter {
         if (speech?.[isCartesia ? 'cartesia' : 'deepgram']?.source === 'own') return provider;
         const backup = isCartesia
           ? lazyBackup(defaultDeepgram)
-          : keys.cartesia !== undefined && cartesiaSettings !== undefined
-            ? lazyBackup(() => exact(CARTESIA_DEFAULT_VOICE_ID, keys)!)
+          : canCartesia
+            ? lazyBackup(() => exact(CARTESIA_DEFAULT_VOICE_ID, keys, language)!)
             : undefined;
         if (backup === undefined) return provider;
         return createFailoverTts(provider, backup, {
@@ -106,7 +130,9 @@ export function createTtsRouter(options: TtsRouterOptions): TtsRouter {
       }
       return defaultDeepgram();
     },
+    // Samples stay in English: they show how a voice sounds.
     forSample: (voiceId, speech) => exact(voiceId, keysFor(speech)),
+    forCallVoice: (voiceId, speech) => exact(voiceId, keysFor(speech), speech?.language),
   };
 }
 
