@@ -5,7 +5,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { twringApi } from '@/api';
 import { ApiError } from '../../api/client';
 import { apiErrorCopy } from '../../api/errors';
-import { probeSpeechKeyError } from '../../api/speech-key-probe';
+import { probeSpeech, probeSpeechKeyError } from '../../api/speech-key-probe';
 import { Icon } from '@/components/Icon';
 import { font } from '@/theme/fonts';
 import { usePalette, type } from '@/theme/tokens';
@@ -29,10 +29,50 @@ const LISTEN_FAILED = "Couldn't play this. Try again.";
 
 /** A refused or unreadable own voice key names its fix; anything else stays generic. */
 export function listenFailureMessage(error: unknown): string {
-  return error instanceof ApiError &&
+  return isSpeechKeyError(error) ? apiErrorCopy(error).message : LISTEN_FAILED;
+}
+
+function isSpeechKeyError(error: unknown): error is ApiError {
+  return (
+    error instanceof ApiError &&
     (error.code === 'speech_key_refused' || error.code === 'speech_key_unreadable')
-    ? apiErrorCopy(error).message
-    : LISTEN_FAILED;
+  );
+}
+
+/**
+ * Agents whose Listen came back as a refused own voice key (each agent has its own voice, so its
+ * own provider). The native player retries a refused answer several times before it reports a
+ * failure (about 5 requests in 4 s), so for these agents the next Listen asks once as plain HTTP
+ * first and shows the refusal straight away.
+ */
+const keyRefused = new Set<string>();
+/** The check before the player is on the tap's path: past this it counts as inconclusive. */
+export const LISTEN_PREFLIGHT_TIMEOUT_MS = 4_000;
+
+/** Remembers a refused own key for this agent so its next Listen checks first. */
+export function noteListenFailure(agentId: string, error: unknown): void {
+  if (isSpeechKeyError(error)) keyRefused.add(agentId);
+}
+
+/** Test helper: back to handing Listen straight to the player. */
+export function forgetListenRefusal(): void {
+  keyRefused.clear();
+}
+
+/**
+ * Before the player: undefined means play. After a refused own key, the probe runs once: a refusal
+ * comes back to show; only a confirmed healthy answer clears the memory. An inconclusive check
+ * (network failure, another error) plays as usual but keeps checking first next time.
+ */
+export async function listenPreflight(
+  agentId: string,
+  probe: () => Promise<'ok' | ApiError | undefined>,
+): Promise<ApiError | undefined> {
+  if (!keyRefused.has(agentId)) return undefined;
+  const found = await probe();
+  if (found === 'ok') keyRefused.delete(agentId);
+  else if (isSpeechKeyError(found)) return found;
+  return undefined;
 }
 
 let current: { owner: symbol; player?: AudioPlayer; stop: () => void } | undefined;
@@ -54,10 +94,13 @@ export function ListenButton({ agentId, messageId, name, autoPlay = false }: Pro
   const generation = useRef(0);
   const owner = useRef(Symbol('listen'));
   const playedAutomatically = useRef(false);
+  const preflight = useRef<AbortController | undefined>(undefined);
   const [failure, setFailure] = useState(LISTEN_FAILED);
 
   const stop = useCallback(() => {
     generation.current++;
+    preflight.current?.abort();
+    preflight.current = undefined;
     const player = owned.current;
     if (current?.owner === owner.current) current = undefined;
     if (player) {
@@ -70,6 +113,7 @@ export function ListenButton({ agentId, messageId, name, autoPlay = false }: Pro
   useEffect(
     () => () => {
       generation.current++;
+      preflight.current?.abort();
       const player = owned.current;
       owned.current = undefined;
       if (current?.owner === owner.current) current = undefined;
@@ -92,6 +136,20 @@ export function ListenButton({ agentId, messageId, name, autoPlay = false }: Pro
       const api = twringApi();
       if (!api) throw new Error('API unavailable');
       const source = await api.messageSpeechUrl(agentId, messageId);
+      const check = new AbortController();
+      preflight.current = check;
+      const deadline = setTimeout(() => check.abort(), LISTEN_PREFLIGHT_TIMEOUT_MS);
+      let refused: ApiError | undefined;
+      try {
+        refused = await listenPreflight(agentId, () =>
+          probeSpeech(fetch, source.uri, source.headers, check.signal),
+        );
+      } finally {
+        clearTimeout(deadline);
+        if (preflight.current === check) preflight.current = undefined;
+      }
+      if (request !== generation.current) return;
+      if (refused !== undefined) throw refused;
       await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false });
       if (request !== generation.current) return;
       const player = createAudioPlayer(source);
@@ -105,6 +163,7 @@ export function ListenButton({ agentId, messageId, name, autoPlay = false }: Pro
           dispatch('fail');
           // The player cannot say why; ask the same URL as plain HTTP for a refused own key.
           void probeSpeechKeyError(fetch, source.uri, source.headers).then((probed) => {
+            noteListenFailure(agentId, probed);
             if (probed !== undefined) setFailure(listenFailureMessage(probed));
           });
         } else if (status.didJustFinish) stop();
@@ -114,6 +173,7 @@ export function ListenButton({ agentId, messageId, name, autoPlay = false }: Pro
     } catch (error) {
       if (request === generation.current) {
         stop();
+        noteListenFailure(agentId, error);
         setFailure(listenFailureMessage(error));
         dispatch('fail');
       }
