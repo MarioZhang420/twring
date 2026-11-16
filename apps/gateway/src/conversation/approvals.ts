@@ -1,13 +1,14 @@
 import type { ApprovalAction } from '@twring/contracts';
 
 import { echoWords } from './echo';
+import { LINES, SPOKEN_APPROVAL_WORDS, type LineLanguage } from './lines';
 
 export const APPROVAL_TIMEOUT_MS = 120_000;
 export const MAX_APPROVAL_WORDS = 4;
 export const UNKNOWN_AGENT_NAME = 'Your agent';
-export const APPROVAL_REASK = 'Please say yes or no, or tap on your phone.';
-export const APPROVAL_TIMEOUT_LINE = 'No answer, so I said no.';
-export const APPROVAL_DENIED_LINE = 'Okay, I said no.';
+export const APPROVAL_REASK = LINES.en.approvalReask;
+export const APPROVAL_TIMEOUT_LINE = LINES.en.approvalTimeout;
+export const APPROVAL_DENIED_LINE = LINES.en.approvalDenied;
 export const APPROVAL_PHRASES: Record<ApprovalAction, string> = {
   edit_files: 'change files',
   delete_files: 'delete files',
@@ -16,8 +17,12 @@ export const APPROVAL_PHRASES: Record<ApprovalAction, string> = {
   fetch_web: 'open a web page',
   other: 'do something that needs your OK',
 };
-export function approvalPrompt(agentName: string, action: ApprovalAction): string {
-  return `${agentName} wants to ${APPROVAL_PHRASES[action]}. Say yes or no, or tap on your phone.`;
+export function approvalPrompt(
+  agentName: string,
+  action: ApprovalAction,
+  language: LineLanguage = 'en',
+): string {
+  return LINES[language].approvalPrompt(agentName, action);
 }
 const YES = [
   'yes',
@@ -67,18 +72,37 @@ export function approvalTitle(title: string, action: ApprovalAction): string {
 }
 
 const byLength = (phrases: string[]) => phrases.map(echoWords).sort((a, b) => b.length - a.length);
-const YES_PATTERNS = byLength(YES);
-const NO_PATTERNS = byLength(NO);
-const FILLER_PATTERNS = byLength(FILLERS);
 
+/** Yes and no patterns for a language: English always counts ("okay" works in any call). */
+interface DecisionPatterns {
+  yes: string[][];
+  no: string[][];
+  fillers: string[][];
+}
+const DECISION_PATTERNS = new Map<LineLanguage, DecisionPatterns>();
+function decisionPatterns(language: LineLanguage): DecisionPatterns {
+  let patterns = DECISION_PATTERNS.get(language);
+  if (patterns === undefined) {
+    const extra = SPOKEN_APPROVAL_WORDS[language];
+    patterns = {
+      yes: byLength([...YES, ...(extra?.yes ?? [])]),
+      no: byLength([...NO, ...(extra?.no ?? [])]),
+      fillers: byLength([...FILLERS, ...(extra?.fillers ?? [])]),
+    };
+    DECISION_PATTERNS.set(language, patterns);
+  }
+  return patterns;
+}
 export function approvalVoiceDecision(
   text: string,
   agentName?: string,
+  language: LineLanguage = 'en',
 ): 'approve' | 'deny' | undefined {
   const words = echoWords(text);
   if (words.length === 0 || words.length > MAX_APPROVAL_WORDS) return undefined;
   const names = new Set(echoWords(agentName ?? ''));
   const rest = words.filter((word) => !names.has(word));
+  const decision = decisionPatterns(language);
   /** `rest` is one or more of `patterns`, with fillers allowed around them. */
   const matches = (patterns: string[][]) => {
     const at = (pattern: string[], index: number) =>
@@ -88,13 +112,14 @@ export function approvalVoiceDecision(
     while (index < rest.length) {
       const pattern = patterns.find((part) => at(part, index));
       if (pattern !== undefined) found = true;
-      const step = pattern ?? FILLER_PATTERNS.find((part) => at(part, index));
+      const step = pattern ?? decision.fillers.find((part) => at(part, index));
       if (step === undefined) return false;
       index += step.length;
     }
     return found;
   };
-  if (matches(YES_PATTERNS)) return 'approve';
-  if (matches(NO_PATTERNS)) return 'deny';
+  const { yes, no } = decision;
+  if (matches(yes)) return 'approve';
+  if (matches(no)) return 'deny';
   return undefined;
 }
