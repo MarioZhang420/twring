@@ -276,17 +276,19 @@ class CartesiaTtsSession implements TtsSession {
    * stale; one naming none (or auth) ends the session.
    */
   private providerError(status: number | undefined, contextId: string | undefined): void {
+    const withStatus = status === undefined ? {} : { providerStatus: status };
     if (isKeyRefusal(status)) {
-      return this.fail({ code: 'auth_failed', recoverable: false });
+      return this.fail({ code: 'auth_failed', recoverable: false, ...withStatus });
     }
-    if (contextId === undefined) return this.fail({ code: 'provider_error', recoverable: true });
+    if (contextId === undefined)
+      return this.fail({ code: 'provider_error', recoverable: true, ...withStatus });
     const context = this.active;
     if (context === undefined || context.contextId !== contextId) return;
     this.active = undefined;
     this.onEvent({
       type: 'generation_error',
       generationId: context.generationId,
-      error: { code: 'provider_error', recoverable: true },
+      error: { code: 'provider_error', recoverable: true, ...withStatus },
     });
   }
 
