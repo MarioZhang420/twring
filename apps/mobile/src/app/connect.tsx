@@ -47,6 +47,8 @@ import { goBack, Screen } from '@/components/Screen';
 import { TextButton } from '@/components/TextButton';
 import { space, type, usePalette, radius } from '@/theme/tokens';
 import { font } from '@/theme/fonts';
+import { defaultVoiceFor, voiceLanguageNote, voicesForLanguage } from '@/language/language';
+import { currentLanguage, languageStore, useSpeakerLanguage } from '@/language/store';
 
 const METHODS: { protocol: AgentProtocol; label: string; description: string }[] = [
   {
@@ -159,6 +161,12 @@ function VoiceStep({
   onSelect: (id: string) => void;
 }) {
   const palette = usePalette();
+  const language = useSpeakerLanguage();
+  // The voice the step opened with stays listed even when it cannot speak the language. When it
+  // opened before a default was picked, the current choice stays listed instead, so a late
+  // English-only default is shown with its note rather than hidden.
+  const [initialVoice] = useState(voiceId);
+  const listed = voices && voicesForLanguage(voices, language, initialVoice ?? voiceId);
   return (
     <>
       <Heading>Choose a voice</Heading>
@@ -168,10 +176,12 @@ function VoiceStep({
         <ActivityIndicator accessibilityLabel="Loading voices" color={palette.textSecondary} />
       )}
       <View accessibilityRole="radiogroup" style={styles.choices}>
-        {voices?.map((voice) => (
+        {listed?.map((voice) => (
           <Choice
             key={voice.id}
-            label={voice.label}
+            label={[voice.label, voiceLanguageNote(voice, language)]
+              .filter((part) => part !== undefined)
+              .join(': ')}
             selected={voiceId === voice.id}
             onPress={() => onSelect(voice.id)}
           />
@@ -384,11 +394,15 @@ function ComputerWizard() {
   function loadVoices() {
     if (api === undefined) return;
     setVoiceError(undefined);
-    api.listVoices().then(
-      (list) => {
+    // The language is known before a default voice is picked.
+    Promise.all([api.listVoices(), languageStore.load()]).then(
+      ([list]) => {
         setVoices(list.voices);
         if (state.voiceId === undefined) {
-          dispatch({ type: 'SET_VOICE', value: list.default_voice_id });
+          dispatch({
+            type: 'SET_VOICE',
+            value: defaultVoiceFor(list.voices, list.default_voice_id, currentLanguage()),
+          });
         }
       },
       (reason: unknown) => setVoiceError(apiErrorCopy(reason)),
@@ -647,11 +661,15 @@ function Wizard({ initial }: { initial: WizardState }) {
   function loadVoices() {
     if (api === undefined) return;
     setVoiceError(undefined);
-    api.listVoices().then(
-      (list) => {
+    // The language is known before a default voice is picked.
+    Promise.all([api.listVoices(), languageStore.load()]).then(
+      ([list]) => {
         setVoices(list.voices);
         if (stateRef.current.voiceId === undefined) {
-          dispatch({ type: 'SET_VOICE', value: list.default_voice_id });
+          dispatch({
+            type: 'SET_VOICE',
+            value: defaultVoiceFor(list.voices, list.default_voice_id, currentLanguage()),
+          });
         }
       },
       (reason: unknown) => setVoiceError(apiErrorCopy(reason)),
