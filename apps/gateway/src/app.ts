@@ -122,6 +122,14 @@ export interface BuildAppOptions {
     redemptions: Collection<RedemptionRecord>;
   };
   /**
+   * The one reminder to connect an agent (waitlist/no-agent-reminder.ts): told of each member
+   * who opens the app, and forgets a person on Delete my data.
+   */
+  agentReminder?: {
+    seen(userId: string, email: string | undefined, stillWanted?: () => boolean): Promise<void>;
+    deleteAllForUser(userId: string): Promise<number>;
+  };
+  /**
    * Mounts /v1/connectors and the relay socket when provided (with `agents`, whose store keeps
    * the paired computers). ADR-023.
    */
@@ -211,6 +219,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     connectors,
     ring,
     language,
+    agentReminder,
     threads,
     messageSpeech,
     files,
@@ -221,6 +230,8 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   // One book for the routes and for deleting a user's data.
   const links = connectors === undefined ? undefined : (connectors.links ?? new LinkBook());
 
+  // Delete my data runs, shared by the deleter and the routes that write a person's data.
+  const deletions = new UserDeletions();
   // Set while the agent routes are mounted; a self-hosted person removal reuses them.
   let agentStores: Stores | undefined;
   let purgePerson: UserDataDeleter | undefined;
@@ -427,7 +438,6 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     });
     const stores = agents.stores;
     agentStores = stores;
-    const deletions = new UserDeletions();
     if (speechKeys !== undefined && stores !== undefined) {
       registerSpeechKeyRoutes(app, {
         vault: stores.speechKeys,
@@ -475,6 +485,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
           },
         }),
         ...(language !== undefined && { language: language.store }),
+        ...(agentReminder !== undefined && { agentReminder }),
         ...(connectors !== undefined &&
           stores !== undefined && {
             connectors: {
@@ -661,6 +672,14 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       profileFor: auth.profileFor,
       userFor: auth.userFor,
       ...(waitlist && { waitlist }),
+      ...(agentReminder !== undefined && {
+        onMemberSeen: (userId: string, email: string | undefined) => {
+          // Opened while Delete my data runs: note nothing. One that starts later stops the write.
+          const since = deletions.epoch(userId);
+          if (deletions.interrupted(userId, since)) return Promise.resolve();
+          return agentReminder.seen(userId, email, () => !deletions.interrupted(userId, since));
+        },
+      }),
     });
 
   app.setNotFoundHandler((request, reply) =>
