@@ -48,11 +48,17 @@ export function statusLineContent(input: StatusLineInput): StatusLineContent {
       text: aiApp ? aiAppReplyStatus(name) : messageStatus('sending', name),
     };
   }
-  if (latest)
+  if (latest) {
+    const failed = latest.status === 'failed';
     return {
       kind: 'status',
-      tone: !aiApp && latest.status === 'failed' ? 'danger' : 'tertiary',
-      text: aiApp ? aiAppReplyStatus(name) : messageStatus(latest.status, name, latest.errorCode),
+      tone: failed ? 'danger' : 'tertiary',
+      // A failure is never hidden behind the AI app's calm "reads this when it checks".
+      text:
+        aiApp && !failed
+          ? aiAppReplyStatus(name)
+          : messageStatus(latest.status, name, latest.errorCode),
     };
+  }
   return { kind: 'empty' };
 }
