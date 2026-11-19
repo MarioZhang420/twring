@@ -163,6 +163,10 @@ When delegating/subagenting, keep the parent responsible for integration. Do not
   acquired by Runner" is cancelled after about 15 minutes; re-run it, and if that keeps
   happening, run the job on `macos-15-intel`. Apple requires the iOS 27 SDK (Xcode 27) for
   uploads from April 2027.
+- **An iOS upload reaches no tester by itself.** The run waits for the owner to approve the
+  `testflight` environment (agents cannot approve it). After Apple processes the build, add it to
+  the external group (Wave 1) and set its notes with the App Store Connect API: internal groups
+  get every build automatically and refuse a manual add, and the notes field is `whatsNew`.
 - **Reloading Caddy on the server drops every computer at once.** It closes all proxied
   WebSockets: on 2026-11-18 a site change dropped 38 computers, all back within 5 seconds, and the
   "computers dropping" alert fired. Reload Caddy only at 0 live calls (it also cuts a call), and
