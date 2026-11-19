@@ -250,6 +250,31 @@ describe('RestSseAdapter edge cases', () => {
     await expect.poll(() => fake!.cancelled).toEqual(['t_break']);
   });
 
+  it('an abort drops events that already arrived in the same chunk', async () => {
+    fake = await startFakeRestServer({
+      script: async (_turn, c) => {
+        c.event('run.started', {});
+        c.event('text.start', { message_id: 'm' });
+        // One write: both deltas reach the adapter's queue before the consumer sees the first.
+        c.raw(
+          'event: text.delta\ndata: {"message_id":"m","delta":"one "}\n\n' +
+            'event: text.delta\ndata: {"message_id":"m","delta":"two "}\n\n',
+        );
+        await new Promise((r) => setTimeout(r, 200));
+      },
+    });
+    const a = new RestSseAdapter({ url: fake.url });
+    adapter = a;
+    await a.connect(ctx, signal());
+    const controller = new AbortController();
+    const seen: AgentEvent[] = [];
+    for await (const event of a.sendTurn(conformanceTurn('t_a'), controller.signal)) {
+      seen.push(event);
+      if (event.type === 'text.delta') controller.abort('superseded');
+    }
+    expect(seen.filter((e) => e.type === 'text.delta')).toHaveLength(1);
+  });
+
   it('no event leaks after an abort mid-stream, and the next turn is answered', async () => {
     let turns = 0;
     fake = await startFakeRestServer({
