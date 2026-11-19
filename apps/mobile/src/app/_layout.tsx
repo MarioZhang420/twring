@@ -16,7 +16,6 @@ import { useRingCoordinator } from '@/ring/service';
 import { watchServerIdentity } from '@/servers/switching';
 import { FONT_ASSETS } from '@/theme/fonts';
 import { callPalette } from '@/theme/tokens';
-import { ActiveCallBar } from '@/components/ActiveCallBar';
 
 // WebRTC globals must exist before any LiveKit code runs.
 registerGlobals();
@@ -84,7 +83,6 @@ function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider value={DarkTheme}>
         <View style={{ flex: 1 }}>
-          <ActiveCallBar />
           <Stack screenOptions={{ headerShown: false }}>
             {/*
           Every app screen is listed here: a screen left out would be reachable while signed out.

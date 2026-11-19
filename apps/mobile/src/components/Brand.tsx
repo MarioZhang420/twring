@@ -159,10 +159,10 @@ export function TwringWordmark({
   );
 }
 
-export function TwringLockup({ size = 28 }: { size?: number }) {
+export function TwringLockup({ size = 28, glow = true }: { size?: number; glow?: boolean }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 0.4 * size }}>
-      <TwringMark size={size * 1.25} stroke={3.2} />
+      <TwringMark size={size * 1.25} stroke={3.2} glow={glow} />
       <TwringWordmark size={size} />
     </View>
   );
