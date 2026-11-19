@@ -9,7 +9,7 @@ Run from the repo root in Git Bash or any POSIX shell. None of them print secret
 | `deploy-site.sh` | Publishes twring.com from `apps/site` |
 | `indexnow.sh` | After a site publish, asks Bing and other IndexNow search engines to crawl the changed pages |
 | `package-skill.sh` | Packs `skills/twring` and can publish it to twring.com/downloads |
-| `publish-image.sh` | Builds and publishes the self-hosting server image |
+| `publish-image.sh` | Builds and publishes the self-hosting server image by hand; the usual way is the `Self-host image: publish` workflow on GitHub Actions |
 | `selfhost-smoke.sh` | Smoke test for a self-hosted server |
 | `check-no-em-dash.mjs` | Part of `pnpm lint`: fails on em dashes |
 | `check-site.mjs` | Part of `pnpm lint`: the home page's structured data must parse and match its visible FAQ |
