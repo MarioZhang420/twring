@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { font } from '@/theme/fonts';
 import { radius, space, type, usePalette } from '@/theme/tokens';
@@ -30,6 +30,8 @@ interface SettingsRowProps {
   icon?: IconName;
   danger?: boolean;
   mono?: boolean;
+  /** `inline` puts a short value on the right; `stacked` puts a sentence under the label. */
+  layout?: 'inline' | 'stacked';
 }
 
 /** The same accessibility shape as Row, inside the grouped settings card. */
@@ -42,8 +44,11 @@ export function SettingsRow({
   icon,
   danger = false,
   mono = false,
+  layout = 'inline',
 }: SettingsRowProps) {
   const palette = usePalette();
+  const { fontScale } = useWindowDimensions();
+  const inline = layout === 'inline' && fontScale <= 1.3;
   const line = {
     borderColor: palette.border,
     borderBottomWidth: divider ? StyleSheet.hairlineWidth : 0,
@@ -55,12 +60,26 @@ export function SettingsRow({
           <Icon name={icon} size={14} color="rgba(255,255,255,0.7)" />
         </View>
       )}
-      <View style={styles.text}>
-        <Text style={[styles.label, { color: danger ? palette.danger : palette.textPrimary }]}>
+      <View style={inline ? styles.inline : styles.text}>
+        <Text
+          style={[
+            styles.label,
+            inline && styles.inlineLabel,
+            { color: danger ? palette.danger : palette.textPrimary },
+          ]}
+        >
           {label}
         </Text>
         {value !== undefined && (
-          <Text style={[styles.value, mono && styles.mono, { color: palette.textTertiary }]}>
+          <Text
+            numberOfLines={inline ? 1 : undefined}
+            style={[
+              styles.value,
+              mono && styles.mono,
+              inline && styles.inlineValue,
+              { color: palette.textTertiary },
+            ]}
+          >
             {value}
           </Text>
         )}
@@ -117,6 +136,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   text: { flex: 1, gap: 2 },
+  inline: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.md },
+  inlineLabel: { flex: 1 },
+  inlineValue: { maxWidth: '55%', textAlign: 'right' },
   label: { fontFamily: font.body, fontSize: type.body.fontSize },
   value: { fontFamily: font.caption, fontSize: type.caption.fontSize, lineHeight: 17 },
   mono: { fontFamily: font.mono },

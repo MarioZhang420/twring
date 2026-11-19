@@ -10,10 +10,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useOnCall } from '@/call/on-call';
 import { type, usePalette } from '@/theme/tokens';
 
-import { TwringWordmark } from './Brand';
+import { TwringLockup, TwringWordmark } from './Brand';
 import { IconButton } from './IconButton';
+import { OnCallChip } from './OnCallChip';
 
 interface Props {
   title?: string;
@@ -23,6 +25,8 @@ interface Props {
   headerRight?: ReactNode;
   headerLeft?: ReactNode;
   wordmark?: boolean;
+  /** With `title`: one header row, the title on the left and the Twring lockup on the right. */
+  brand?: boolean;
   refreshing?: boolean;
   onRefresh?: () => void;
   /** Pinned below the scrolling content: the screen's primary action. */
@@ -42,6 +46,7 @@ export function Screen({
   headerRight,
   headerLeft,
   wordmark = false,
+  brand = false,
   refreshing,
   onRefresh,
   footer,
@@ -49,12 +54,27 @@ export function Screen({
 }: Props) {
   const palette = usePalette();
   const onBack = typeof back === 'function' ? back : goBack;
+  const onCall = useOnCall();
+  const chip = onCall.active ? <OnCallChip startedAt={onCall.connectedAt} /> : undefined;
+  const branded = brand && title !== undefined;
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: palette.background }]}>
-      {(back !== undefined && back !== false) ||
-      headerLeft !== undefined ||
-      headerRight !== undefined ||
-      wordmark ? (
+      {branded ? (
+        <View style={styles.brandHeader}>
+          <Text
+            accessibilityRole="header"
+            numberOfLines={1}
+            style={[type.screenTitle, styles.brandTitle, { color: palette.textPrimary }]}
+          >
+            {title}
+          </Text>
+          {chip ?? headerRight ?? <TwringLockup size={18} glow={false} />}
+        </View>
+      ) : onCall.active ||
+        (back !== undefined && back !== false) ||
+        headerLeft !== undefined ||
+        headerRight !== undefined ||
+        wordmark ? (
         <View style={styles.header}>
           <View style={styles.headerSlot}>
             {headerLeft ??
@@ -63,7 +83,7 @@ export function Screen({
               ) : null)}
           </View>
           <View style={styles.headerCenter}>{wordmark && <TwringWordmark size={20} />}</View>
-          <View style={styles.headerSlot}>{headerRight}</View>
+          <View style={styles.headerSlot}>{chip ?? headerRight}</View>
         </View>
       ) : null}
       {/*
@@ -80,7 +100,7 @@ export function Screen({
             ) : undefined
           }
         >
-          {title !== undefined && (
+          {title !== undefined && !branded && (
             <Text
               accessibilityRole="header"
               style={[type.screenTitle, { color: palette.textPrimary }]}
@@ -107,6 +127,14 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   // Grows for wider controls (the connect steps' progress); empty slots keep the title centred.
+  brandHeader: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 22,
+  },
+  brandTitle: { flex: 1 },
   headerSlot: { minWidth: 36, alignItems: 'center' },
   headerCenter: { flex: 1, alignItems: 'center' },
   content: { paddingHorizontal: 22, paddingVertical: 16, gap: 18 },

@@ -20,6 +20,11 @@ function Dot({ delay, color }: { delay: number; color: string }) {
   const motion = useAnimatedStyle(() => ({ opacity: opacity.value }));
   return <Animated.View style={[styles.dot, { backgroundColor: color }, motion]} />;
 }
+/** Reduced motion stops the dots, never the words. */
+export function workingText(label: string | undefined): string {
+  return label ? `Working · ${label}` : 'Working…';
+}
+
 export function WorkingRow({
   name,
   activity,
@@ -43,9 +48,7 @@ export function WorkingRow({
       style={styles.wrap}
     >
       <View style={styles.row}>
-        <Text style={[styles.label, { color: palette.accent }]}>
-          {reduced || !label ? 'Working…' : `Working · ${label}`}
-        </Text>
+        <Text style={[styles.label, { color: palette.accent }]}>{workingText(label)}</Text>
         {!reduced && (
           <View style={styles.dots}>
             <Dot delay={0} color={palette.accent} />
