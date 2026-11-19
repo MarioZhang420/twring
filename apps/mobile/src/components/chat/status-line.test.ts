@@ -44,3 +44,30 @@ it('uses the AI app reply copy', () => {
     tone: 'tertiary',
   });
 });
+
+it('shows an AI app send that failed in danger with a retry', () => {
+  const content = statusLineContent({
+    ...base,
+    aiApp: true,
+    pending: { clientId: 'c2', state: 'failed' },
+  });
+  expect(content).toMatchObject({
+    kind: 'status',
+    tone: 'danger',
+    retryClientId: 'c2',
+    text: "Didn't go through",
+  });
+});
+
+it('never hides a failed AI app message behind the calm reply copy', () => {
+  const content = statusLineContent({
+    ...base,
+    aiApp: true,
+    latest: { status: 'failed', errorCode: 'rate_limited' },
+  });
+  expect(content).toMatchObject({
+    kind: 'status',
+    tone: 'danger',
+    text: "Didn't go through: too many messages",
+  });
+});
