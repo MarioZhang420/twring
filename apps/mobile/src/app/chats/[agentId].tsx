@@ -4,13 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { agentStatusFor, callRefusal } from '@/agents/labels';
-import {
-  aiAppEmptyChat,
-  aiAppReplyStatus,
-  canCall,
-  isAiApp,
-  showComputerCallHint,
-} from '@/agents/ai-app';
+import { aiAppEmptyChat, canCall, isAiApp, showComputerCallHint } from '@/agents/ai-app';
 import { autoListenTarget } from '@/threads/auto-listen';
 import { ApiError, twringApi } from '@/api';
 import { callAgent } from '@/call/call-agent';
@@ -25,17 +19,21 @@ import { DateSeparator } from '@/components/chat/DateSeparator';
 import { LinkSheet } from '@/components/chat/LinkSheet';
 import { ListenButton, stopMessageSpeech } from '@/components/chat/ListenButton';
 import { Notice } from '@/components/chat/Notice';
-import { WorkingRow } from '@/components/chat/WorkingRow';
+import { StatusLine } from '@/components/chat/StatusLine';
+import { statusLineContent } from '@/components/chat/status-line';
+import { StreamingReply } from '@/components/chat/WorkingRow';
+import { CallButton } from '@/components/CallButton';
+import { OnCallChip } from '@/components/OnCallChip';
+import { useOnCall } from '@/call/on-call';
 import { ErrorNotice } from '@/components/ErrorNotice';
 import { GhostButton } from '@/components/GhostButton';
-import { Icon } from '@/components/Icon';
 import { IconButton } from '@/components/IconButton';
 import { Skeleton } from '@/components/Skeleton';
 import { useNow } from '@/hooks/useNow';
 import { ringPlatform } from '@/platform/ring';
 import { STATUS_POLL_MS, useResource } from '@/hooks/useResource';
 import { font } from '@/theme/fonts';
-import { type, usePalette, radius } from '@/theme/tokens';
+import { type, usePalette } from '@/theme/tokens';
 import { useChat } from '@/threads/chats';
 import { callDuration, dateLabel, messageStatus } from '@/threads/presentation';
 import type { PreparedFile } from '@/threads/files';
@@ -73,6 +71,7 @@ export default function ChatScreen() {
   const now = useNow();
   const chat = useChat(id);
   const call = useCallView();
+  const liveCall = useOnCall();
   const [callForThisChat, setCallForThisChat] = useState(false);
   const onCall = callForThisChat && isActive(call.call);
   useEffect(() => {
@@ -157,6 +156,7 @@ export default function ChatScreen() {
       callAgent(agent.data);
     }
   };
+  const streaming = working && !!chat.state.progress?.text;
   const rows = useMemo(() => {
     const ordered: Row[] = [];
     let previous = '';
@@ -175,9 +175,9 @@ export default function ChatScreen() {
     }
     for (const pending of chat.pending)
       ordered.push({ key: pending.clientId, kind: 'pending', ...pending });
-    if (working) ordered.push({ key: 'working', kind: 'working' });
+    if (streaming) ordered.push({ key: 'working', kind: 'working' });
     return ordered.reverse();
-  }, [messages, chat.pending, working, now]);
+  }, [messages, chat.pending, streaming, now]);
   const send = () => {
     if (draft.trim() || files.length) {
       if (files.length) chat.sendFiles(draft.trim(), files);
@@ -188,22 +188,27 @@ export default function ChatScreen() {
     }
   };
   const latestId = lastUser?.id;
-  const latestPendingId = chat.pending.at(-1)?.clientId;
+  const latestPending = chat.pending.at(-1);
+  const latestPendingId = latestPending?.clientId;
+  const statusContent = statusLineContent({
+    name,
+    aiApp,
+    working,
+    activity: chat.state.progress?.activity,
+    pending: latestPending,
+    latest:
+      lastUser?.kind === 'user_text'
+        ? { status: lastUser.status, errorCode: lastUser.error_code }
+        : undefined,
+  });
+  const stop = () => {
+    const target = chat.state.progress?.messageId ?? latestId;
+    if (target) void chat.stop(target);
+  };
   const render = ({ item }: { item: Row }) => {
     if (item.kind === 'date') return <DateSeparator label={item.label} />;
     if (item.kind === 'working')
-      return (
-        <WorkingRow
-          name={name}
-          activity={chat.state.progress?.activity}
-          text={chat.state.progress?.text}
-          onStop={() => {
-            if (chat.state.progress?.messageId ?? latestId)
-              void chat.stop(chat.state.progress?.messageId ?? latestId!);
-          }}
-          onLink={setUrl}
-        />
-      );
+      return <StreamingReply name={name} text={chat.state.progress?.text} onLink={setUrl} />;
     if (item.kind === 'pending')
       return (
         <View>
@@ -220,31 +225,27 @@ export default function ChatScreen() {
             pendingFiles={item.files}
             onLink={setUrl}
           />
-          {(!aiApp || item.clientId === latestPendingId || item.state === 'failed') && (
+          {item.state === 'failed' && item.clientId !== latestPendingId && (
             <View style={styles.status}>
               <Text
                 style={{
-                  color: item.state === 'failed' ? palette.danger : palette.textTertiary,
+                  color: palette.danger,
                   fontFamily: font.mono,
                   fontSize: type.microLabel.fontSize,
                 }}
               >
-                {item.state === 'failed' && item.error
+                {item.error
                   ? `Didn't go through: ${apiErrorCopy(item.error).message}`
-                  : aiApp
-                    ? aiAppReplyStatus(name)
-                    : messageStatus(item.state, name)}
+                  : messageStatus(item.state, name)}
               </Text>
-              {item.state === 'failed' && (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Retry"
-                  style={styles.retry}
-                  onPress={() => chat.retry(item.clientId)}
-                >
-                  <Text style={[styles.retryLabel, { color: palette.accent }]}>Retry</Text>
-                </Pressable>
-              )}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Retry"
+                style={styles.retry}
+                onPress={() => chat.retry(item.clientId)}
+              >
+                <Text style={[styles.retryLabel, { color: palette.accent }]}>Retry</Text>
+              </Pressable>
             </View>
           )}
         </View>
@@ -301,19 +302,6 @@ export default function ChatScreen() {
             autoPlay={message.id === autoListenId}
           />
         )}
-        {own && message.id === latestId && chat.pending.length === 0 && (
-          <Text
-            accessibilityLiveRegion="polite"
-            style={[
-              styles.statusText,
-              { color: message.status === 'failed' ? palette.danger : palette.textTertiary },
-            ]}
-          >
-            {aiApp
-              ? aiAppReplyStatus(name)
-              : messageStatus(message.status, name, message.error_code)}
-          </Text>
-        )}
         {own && message.status === 'interrupted' && (
           <Notice
             text={`Interrupted: ${name} may have started this. Its answer will appear here if it finishes.`}
@@ -346,94 +334,96 @@ export default function ChatScreen() {
               {name}
             </Text>
             <Text
-              numberOfLines={2}
-              style={[
-                styles.subtitle,
-                {
-                  color: working ? palette.accent : palette.textSecondary,
-                  fontStyle: working ? 'italic' : 'normal',
-                },
-              ]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              style={[styles.subtitle, { color: palette.textSecondary }]}
             >
+              {/* Working shows once, in the status line above the message box. */}
               {aiApp
                 ? 'AI app'
-                : working
-                  ? 'Working…'
-                  : agent.data?.connector_online === false
-                    ? 'Offline · start it on your computer'
-                    : agent.data
-                      ? agentStatusFor(agent.data).label
-                      : ''}
+                : agent.data?.connector_online === false
+                  ? 'Offline · start it on your computer'
+                  : agent.data
+                    ? agentStatusFor(agent.data).label
+                    : ''}
             </Text>
           </View>
         </Pressable>
-        {canCall(agent.data) && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Call ${name}`}
-            accessibilityState={{ disabled: offline }}
-            disabled={offline}
-            onPress={start}
-            style={[
-              styles.call,
-              { backgroundColor: offline ? palette.surfaceRaised : palette.accent },
-            ]}
-          >
-            <Icon name="phone" size={20} color={offline ? palette.textMuted : palette.onAccent} />
-          </Pressable>
+        {liveCall.active ? (
+          <OnCallChip startedAt={liveCall.connectedAt} />
+        ) : (
+          canCall(agent.data) && (
+            <CallButton name={name} variant="fill" disabled={offline} onPress={start} />
+          )
         )}
       </View>
-      {removed && <Notice text="This agent was removed." />}
-      {agent.error && !removed && (
-        <ErrorNotice error={agent.error} onRetry={() => agent.reload()} />
-      )}
-      {messagePage.error && !removed && (
-        <ErrorNotice error={messagePage.error} onRetry={() => messagePage.reload()} />
-      )}
-      {(agent.loading || messagePage.loading) && (
-        <View style={styles.skeleton}>
-          <Skeleton height={64} />
-          <Skeleton height={88} />
-          <Skeleton height={64} />
-        </View>
-      )}
-      {!agent.loading &&
-        !messagePage.loading &&
-        !removed &&
-        !messagePage.error &&
-        rows.length === 0 && (
-          <View style={styles.empty}>
-            <Avatar
-              id={id}
-              name={name}
-              avatarVersion={agent.data?.avatar_version}
-              size={72}
-              online={aiApp ? undefined : !offline}
-            />
-            <Text style={[type.title, { color: palette.textPrimary }]}>{name}</Text>
-            <Text style={[type.body, { color: palette.textSecondary, textAlign: 'center' }]}>
-              {aiApp ? aiAppEmptyChat(name) : `Messages and calls with ${name} appear here.`}
-            </Text>
-            {showComputerCallHint(agent.data) && <ComputerCallHint name={name} />}
-            {!aiApp && <GhostButton label={`Call ${name}`} onPress={start} disabled={offline} />}
+      <View style={styles.body}>
+        {(agent.loading || messagePage.loading) && (
+          <View style={styles.skeleton}>
+            <Skeleton height={64} />
+            <Skeleton height={88} />
+            <Skeleton height={64} />
           </View>
         )}
-      {rows.length > 0 && (
-        <FlatList
-          inverted
-          data={rows}
-          renderItem={render}
-          keyExtractor={(item) => item.key}
-          onEndReached={() => {
-            void chat.loadOlder();
-          }}
-          onEndReachedThreshold={0.25}
-          contentContainerStyle={styles.list}
-          keyboardShouldPersistTaps="handled"
-        />
-      )}
+        {!agent.loading &&
+          !messagePage.loading &&
+          !removed &&
+          !messagePage.error &&
+          rows.length === 0 && (
+            <View style={styles.empty}>
+              <Avatar
+                id={id}
+                name={name}
+                avatarVersion={agent.data?.avatar_version}
+                size={72}
+                online={aiApp ? undefined : !offline}
+              />
+              <Text style={[type.title, { color: palette.textPrimary }]}>{name}</Text>
+              <Text style={[type.body, { color: palette.textSecondary, textAlign: 'center' }]}>
+                {aiApp ? aiAppEmptyChat(name) : `Messages and calls with ${name} appear here.`}
+              </Text>
+              {showComputerCallHint(agent.data) && <ComputerCallHint name={name} />}
+              {!aiApp && <GhostButton label={`Call ${name}`} onPress={start} disabled={offline} />}
+            </View>
+          )}
+        {rows.length > 0 && (
+          <FlatList
+            inverted
+            data={rows}
+            renderItem={render}
+            keyExtractor={(item) => item.key}
+            onEndReached={() => {
+              void chat.loadOlder();
+            }}
+            onEndReachedThreshold={0.25}
+            contentContainerStyle={styles.list}
+            keyboardShouldPersistTaps="handled"
+          />
+        )}
+        {(removed || agent.error || messagePage.error) && (
+          // Opaque, so a notice laid over the messages stays readable.
+          <View
+            pointerEvents="box-none"
+            style={[styles.notices, { backgroundColor: palette.background }]}
+          >
+            {removed && <Notice text="This agent was removed." />}
+            {agent.error && !removed && (
+              <ErrorNotice error={agent.error} onRetry={() => agent.reload()} />
+            )}
+            {messagePage.error && !removed && (
+              <ErrorNotice error={messagePage.error} onRetry={() => messagePage.reload()} />
+            )}
+          </View>
+        )}
+      </View>
       {!removed && (
         <KeyboardAvoidingView behavior="padding">
+          <StatusLine
+            name={name}
+            content={statusContent}
+            onStop={stop}
+            onRetry={(clientId) => chat.retry(clientId)}
+          />
           <Composer
             name={name}
             value={draft}
@@ -479,16 +469,18 @@ const styles = StyleSheet.create({
   titleBlock: { flex: 1 },
   name: { fontFamily: font.title, fontSize: type.headline.fontSize },
   subtitle: { fontFamily: font.caption, fontSize: type.caption.fontSize },
-  call: {
-    width: 48,
-    height: 48,
-    borderRadius: radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
+  body: { flex: 1 },
+  notices: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 18,
+    paddingBottom: 8,
+    gap: 8,
   },
   list: { paddingHorizontal: 18, paddingVertical: 12 },
   status: { alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', gap: 4 },
-  statusText: { alignSelf: 'flex-end', fontFamily: font.mono, fontSize: type.microLabel.fontSize },
   retry: { minHeight: 48, justifyContent: 'center', paddingHorizontal: 8 },
   retryLabel: { fontFamily: font.bodyEmphasis, fontSize: type.caption.fontSize },
   empty: {
