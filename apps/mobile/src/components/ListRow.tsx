@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
   italic: { fontStyle: 'italic' },
   badge: {
     minWidth: 20,
-    height: 20,
+    minHeight: 20,
     paddingHorizontal: 6,
     borderRadius: radius.pill,
     alignItems: 'center',
