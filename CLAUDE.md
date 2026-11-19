@@ -142,8 +142,9 @@ When delegating/subagenting, keep the parent responsible for integration. Do not
 - **The connector is not on npm.** Every user-facing command downloads `twring-connect.mjs` from
   Twring and runs it with Node: `curl -fsSL <server>/downloads/twring-connect.mjs -o
   twring-connect.mjs && node twring-connect.mjs ...`. Never write `npx twring-connect` or
-  `npx cord-connect` in code, docs, hooks or the app: anyone could publish a package under that
-  name and it would run on users' machines.
+  `npx cord-connect` in code, docs, hooks or the app. Both names are held on npm by placeholders
+  (`private/npm-placeholders`) that only print how to reinstall a hook; never publish real code
+  there.
 - **Hooks written into a user's Claude Code or Codex config** run the copied connector with an
   absolute Node path, POSIX-quoted (Claude Code on Windows runs hooks in Git Bash). Reinstalling
   replaces an old Twring hook; it never adds a second one.
@@ -162,6 +163,13 @@ When delegating/subagenting, keep the parent responsible for integration. Do not
   acquired by Runner" is cancelled after about 15 minutes; re-run it, and if that keeps
   happening, run the job on `macos-15-intel`. Apple requires the iOS 27 SDK (Xcode 27) for
   uploads from April 2027.
+- **Reloading Caddy on the server drops every computer at once.** It closes all proxied
+  WebSockets: on 2026-11-18 a site change dropped 38 computers, all back within 5 seconds, and the
+  "computers dropping" alert fired. Reload Caddy only at 0 live calls (it also cuts a call), and
+  expect that alert.
+- **`livekit-client` is patched** (`patches/livekit-client@<version>.patch`, tested by
+  `apps/mobile/scripts/livekit-patch.test.mjs`). Metro bundles only its ESM build, so patch only
+  that file. Upgrading livekit-client means checking upstream for each fix and remaking the patch.
 
 ## Completion checklist
 
