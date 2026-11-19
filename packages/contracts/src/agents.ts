@@ -332,6 +332,12 @@ export type CallHistoryItem = z.infer<typeof callHistoryItemSchema>;
 export const callHistoryResponseSchema = z.object({ calls: z.array(callHistoryItemSchema) });
 export type CallHistoryResponse = z.infer<typeof callHistoryResponseSchema>;
 
+/** `DELETE /v1/calls/history`: how many Recents entries (calls and missed rings) were removed. */
+export const deleteCallHistoryResponseSchema = z.object({
+  deleted: z.number().int().nonnegative(),
+});
+export type DeleteCallHistoryResponse = z.infer<typeof deleteCallHistoryResponseSchema>;
+
 /**
  * `DELETE /v1/me/data`: everything Twring stored for the calling user is gone. Counts are what was
  * removed; `live_calls_ended` counts calls that were still running and were hung up first.

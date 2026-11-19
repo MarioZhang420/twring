@@ -15,6 +15,7 @@ import {
   type CallFeedbackRequest,
   connectionTestResponseSchema,
   connectorListResponseSchema,
+  deleteCallHistoryResponseSchema,
   deleteMyDataResponseSchema,
   pairingResponseSchema,
   pairingStatusResponseSchema,
@@ -166,6 +167,10 @@ export interface TwringApi {
   sendAppFeedback(note: string, signal?: AbortSignal): Promise<void>;
   /** Calls and missed rings, newest first. */
   history(signal?: AbortSignal): Promise<HistoryEntry[]>;
+  /** Removes one Recents entry (a call or a missed ring) by its id. */
+  deleteHistoryItem(id: string, signal?: AbortSignal): Promise<void>;
+  /** Removes every Recents entry; chats, rings and daily limits are kept. */
+  clearHistory(signal?: AbortSignal): Promise<{ deleted: number }>;
   /** Deletes every agent, saved key, and call summary of this user; ends their live calls. */
   deleteMyData(signal?: AbortSignal): Promise<DeleteMyDataResponse>;
   /** Ends Sign in with Apple before an Apple account is deleted, with a fresh code from Apple. */
@@ -731,6 +736,15 @@ export function createTwringApi(options: TwringApiOptions): TwringApi {
       return entries.flatMap((entry) => (entry.kind === 'missed_invite' ? [] : [entry]));
     },
     history,
+    async deleteHistoryItem(id, signal) {
+      await request('DELETE', `/v1/calls/history/${encodeURIComponent(id)}`, { signal });
+    },
+    async clearHistory(signal) {
+      return parse(
+        deleteCallHistoryResponseSchema,
+        await request('DELETE', '/v1/calls/history', { signal }),
+      );
+    },
     async createPairing(signal) {
       return parse(
         pairingResponseSchema,

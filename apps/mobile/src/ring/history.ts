@@ -90,3 +90,11 @@ export function historySummary(entries: readonly HistoryEntry[]): string | undef
   const seconds = calls.reduce((total, entry) => total + entry.duration_s, 0);
   return `${calls.length} ${calls.length === 1 ? 'call' : 'calls'} · ${(seconds / 3600).toFixed(1)} hours`;
 }
+
+/** Recents without the entries just deleted (shown at once while the server confirms). */
+export function withoutRemoved(
+  entries: readonly HistoryEntry[],
+  removed: ReadonlySet<string>,
+): HistoryEntry[] {
+  return removed.size === 0 ? [...entries] : entries.filter((entry) => !removed.has(entry.call_id));
+}

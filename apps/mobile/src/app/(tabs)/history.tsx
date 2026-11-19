@@ -1,26 +1,52 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import type { Agent } from '@twring/contracts';
 import { isAiApp } from '@/agents/ai-app';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { twringApi } from '@/api';
+import { ApiError } from '@/api/client';
+import { apiErrorCopy, type ErrorCopy } from '@/api/errors';
 import { startCall } from '@/call/start';
 import { Avatar } from '@/components/Avatar';
 import { CallButton } from '@/components/CallButton';
 import { ErrorNotice } from '@/components/ErrorNotice';
+import { GhostButton } from '@/components/GhostButton';
 import { IconButton } from '@/components/IconButton';
 import { ListRow } from '@/components/ListRow';
 import { Screen } from '@/components/Screen';
+import { Sheet } from '@/components/Sheet';
 import { Skeleton } from '@/components/Skeleton';
+import { TextButton } from '@/components/TextButton';
 import { Waveform } from '@/components/Waveform';
 import { useNow } from '@/hooks/useNow';
 import { useResource } from '@/hooks/useResource';
-import { DAY_GROUPS, groupHistory, historyListRow, historySummary } from '@/ring/history';
+import {
+  DAY_GROUPS,
+  groupHistory,
+  historyListRow,
+  historySummary,
+  withoutRemoved,
+} from '@/ring/history';
 import type { HistoryEntry } from '@/ring/protocol';
 import { parseCallBack } from '@/ring/missed';
 import { markMissedSeen } from '@/ring/missed-seen';
 import { space, type, usePalette } from '@/theme/tokens';
+
+const DELETE_ACTION = 'delete';
+const DELETE_ACTIONS = [{ name: DELETE_ACTION, label: 'Delete from Recents' }] as const;
+
+/** What a failed clear says; an older self-hosted server has no clear endpoint (404/405). */
+function clearErrorCopy(error: unknown): ErrorCopy {
+  if (
+    error instanceof ApiError &&
+    error.kind === 'http' &&
+    (error.status === 404 || error.status === 405)
+  ) {
+    return { message: 'Your server needs an update to clear Recents.', retryable: false };
+  }
+  return apiErrorCopy(error);
+}
 
 /** Call history: calls and missed agent rings, with no transcript kept. */
 export default function HistoryScreen() {
@@ -63,8 +89,44 @@ export default function HistoryScreen() {
       startCall({ agentId: callBackId, ...(callBackName !== undefined && { name: callBackName }) });
   }, [callBackId, callBackName, agents.data, agents.error]);
 
-  const groups = groupHistory(history.data ?? [], now);
-  const summary = historySummary(history.data ?? []);
+  // Deleted entries leave the list as soon as the server confirms, before the reload lands.
+  const [removed, setRemoved] = useState<ReadonlySet<string>>(new Set());
+  const [confirm, setConfirm] = useState<{ kind: 'one'; id: string } | { kind: 'all' }>();
+  const [busy, setBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<ErrorCopy>();
+  const entries = withoutRemoved(history.data ?? [], removed);
+
+  function runDelete() {
+    const api = twringApi();
+    if (confirm === undefined || api === undefined || busy) return;
+    const ids = confirm.kind === 'one' ? [confirm.id] : entries.map((entry) => entry.call_id);
+    setBusy(true);
+    setDeleteError(undefined);
+    const request = confirm.kind === 'one' ? api.deleteHistoryItem(confirm.id) : api.clearHistory();
+    void request
+      .then(
+        () => {
+          setRemoved((current) => new Set([...current, ...ids]));
+          setConfirm(undefined);
+          history.reload({ silent: true });
+        },
+        (error: unknown) => {
+          setConfirm(undefined);
+          setDeleteError(confirm.kind === 'all' ? clearErrorCopy(error) : apiErrorCopy(error));
+        },
+      )
+      .finally(() => setBusy(false));
+  }
+  const rowActions = (id: string) => ({
+    onLongPress: () => setConfirm({ kind: 'one', id }),
+    accessibilityActions: DELETE_ACTIONS,
+    onAccessibilityAction: (event: { nativeEvent: { actionName: string } }) => {
+      if (event.nativeEvent.actionName === DELETE_ACTION) setConfirm({ kind: 'one', id });
+    },
+  });
+
+  const groups = groupHistory(entries, now);
+  const summary = historySummary(entries);
   return (
     <Screen
       brand
@@ -73,10 +135,21 @@ export default function HistoryScreen() {
       onRefresh={() => history.reload({ refresh: true })}
     >
       {summary !== undefined && (
-        <Text style={[type.caption, styles.summary, { color: palette.textTertiary }]}>
-          {summary}
-        </Text>
+        <View style={styles.summaryRow}>
+          <Text style={[type.caption, styles.summary, { color: palette.textTertiary }]}>
+            {summary}
+          </Text>
+          {entries.length > 0 && (
+            <TextButton
+              label="Clear all"
+              tone="danger"
+              disabled={busy}
+              onPress={() => setConfirm({ kind: 'all' })}
+            />
+          )}
+        </View>
       )}
+      {deleteError !== undefined && <ErrorNotice error={deleteError} />}
       {history.loading && (
         <View accessible accessibilityLabel="Loading call history" style={styles.loading}>
           {[0, 1, 2, 3, 4].map((item) => (
@@ -87,7 +160,7 @@ export default function HistoryScreen() {
       {history.error !== undefined && (
         <ErrorNotice error={history.error} onRetry={() => history.reload()} />
       )}
-      {history.data?.length === 0 && (
+      {history.data !== undefined && entries.length === 0 && (
         <View style={styles.empty}>
           <Waveform
             width={280}
@@ -132,6 +205,7 @@ export default function HistoryScreen() {
                         lineTone="danger"
                         {...(reason ? { line2: reason } : {})}
                         accessibilityLabel={row.accessibilityLabel}
+                        {...rowActions(item.call_id)}
                         right={
                           aiApp === true ? (
                             <IconButton
@@ -165,6 +239,7 @@ export default function HistoryScreen() {
                       line={`${row.outcome} · ${row.when} · ${row.duration}`}
                       lineTone={row.failed ? 'danger' : 'secondary'}
                       accessibilityLabel={row.accessibilityLabel}
+                      {...rowActions(item.call_id)}
                     />
                   );
                 })}
@@ -172,12 +247,41 @@ export default function HistoryScreen() {
             </View>
           ),
       )}
+      <Sheet
+        visible={confirm !== undefined}
+        title={confirm?.kind === 'all' ? 'Clear Recents?' : 'Delete this call?'}
+        onClose={() => {
+          if (!busy) setConfirm(undefined);
+        }}
+      >
+        <View style={styles.sheet}>
+          <Text style={[type.body, { color: palette.textSecondary }]}>
+            {confirm?.kind === 'all'
+              ? "This deletes your call list from Twring. Calls in your chats stay. This can't be undone."
+              : 'It is removed from Recents. Calls in your chats stay.'}
+          </Text>
+          <GhostButton
+            label={confirm?.kind === 'all' ? 'Clear all' : 'Delete'}
+            tone="danger"
+            disabled={busy}
+            onPress={runDelete}
+          />
+          <GhostButton label="Cancel" disabled={busy} onPress={() => setConfirm(undefined)} />
+        </View>
+      </Sheet>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  summary: { fontVariant: ['tabular-nums'] },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: space.md,
+  },
+  summary: { flex: 1, fontVariant: ['tabular-nums'] },
+  sheet: { gap: 14 },
   loading: { gap: space.xs },
   empty: { alignItems: 'center', gap: space.lg, paddingTop: 72 },
   emptyText: { textAlign: 'center' },

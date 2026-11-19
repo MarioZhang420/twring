@@ -904,6 +904,7 @@ describe('restart', () => {
           return Promise.resolve();
         },
         list: () => Promise.resolve([]),
+        delete: () => Promise.resolve(false),
         deleteAllForUser: () => Promise.resolve(0),
         usageRollup: () => Promise.resolve([]),
       },
