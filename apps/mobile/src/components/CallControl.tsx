@@ -10,14 +10,18 @@ export function CallControl({
   onPress,
   accessibilityLabel,
   variant = 'default',
+  size = 'default',
 }: {
   icon: IconName;
   label: string;
   onPress: () => void;
   accessibilityLabel: string;
   variant?: 'default' | 'active' | 'danger';
+  /** `large` is for End: the one control that must never be missed. */
+  size?: 'default' | 'large';
 }) {
   const palette = usePalette();
+  const large = size === 'large';
   return (
     <Pressable
       accessibilityRole="button"
@@ -29,6 +33,7 @@ export function CallControl({
       <View
         style={[
           styles.circle,
+          large && styles.circleLarge,
           {
             backgroundColor:
               variant === 'danger'
@@ -44,7 +49,7 @@ export function CallControl({
       >
         <Icon
           name={icon}
-          size={20}
+          size={large ? 28 : 20}
           strokeWidth={1.7}
           color={
             variant === 'active'
@@ -83,5 +88,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  circleLarge: { width: 72, height: 72 },
   label: { fontFamily: font.interMedium, fontSize: type.microLabel.fontSize, letterSpacing: 0.2 },
 });

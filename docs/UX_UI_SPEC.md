@@ -176,28 +176,31 @@ A fake telephone ring sound is optional and should only be added after testing; 
 
 ## 10. Active call
 
-Keep the surface calm:
+Keep the surface calm. Portrait, like a phone call; every band keeps its height:
 
 ```text
-             Operator
+   v        ● Connected
 
-             ● Connected
+          ( agent picture )      ring = state: cyan listening, white speaking,
+            Claude Code           grey working, amber reconnecting
+          On your computer
 
-          [live visualizer]
-
-            Listening
-               or
-        Checking calendar…
-               or
-             Speaking
-
+            Working…             status, detail line (reserved), clock
+        Running the tests
               03:14
 
-        Mute    Audio
-              End
+     [one visualizer: whoever has the floor]
+
+   CLAUDE CODE   last 3 lines of the reply
+   YOU           last 2 lines of what you said
+
+     Mute      ( End )      Audio
+            Mic is on
 ```
 
-Transcript opens as a sheet rather than dominating by default.
+End is bottom centre and larger than Mute and Audio. Mute and Audio appear once. "Say something"
+shows only while Twring is listening; otherwise the line says the mic is on (or muted, or waiting
+for audio). Transcript opens as a sheet rather than dominating by default.
 
 ## 11. Voice visualization
 
