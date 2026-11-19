@@ -157,6 +157,9 @@ When delegating/subagenting, keep the parent responsible for integration. Do not
   rendered page or video as a viewer sees it. Passing tests are necessary, not sufficient.
 - **Plugins and integrations** (`integrations/hermes`) ship separately from the app: when a shared
   behaviour changes, check them too and bump their version only if their own code changed.
+- **Outside contributors:** review their pull requests and issues here and write each reply as a
+  draft for the owner. Nothing is posted on GitHub (comment, review, label, close, merge) until the
+  owner approves that reply. Outside PRs are never set to auto-merge.
 - **Windows checkouts:** some tools write CRLF line endings; run `pnpm format:check` before
   committing. Keep worktrees on short paths (native Android builds fail on deep ones).
 - **iOS TestFlight builds:** GitHub's Apple-silicon macOS runners sometimes run out. A job "not
