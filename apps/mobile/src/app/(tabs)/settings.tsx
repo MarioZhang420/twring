@@ -2,7 +2,7 @@ import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import type { MeUsageResponse } from '@twring/contracts';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 
 import { apiErrorCopy, twringApi, type ErrorCopy } from '@/api';
 import { authController, deleteSignInAccount, useAuth } from '@/auth';
@@ -213,12 +213,13 @@ export default function SettingsScreen() {
 ${usageReset}`
             : usageSummary(usage.usage)
         }
+        layout="stacked"
         divider={false}
       />
     ) : undefined;
 
   return (
-    <Screen wordmark title="Settings">
+    <Screen brand title="Settings">
       {selfhosted && <YourServer profile={server} />}
 
       {signedIn && !selfhosted && (
@@ -227,16 +228,11 @@ ${usageReset}`
           <SettingsRow
             label="Sign out"
             value="Ends any call in progress"
+            layout="stacked"
             accessibilityHint="Asks before signing out"
             onPress={confirmSignOut}
             divider={false}
           />
-          {accountDeletion.state === 'deleting' && (
-            <ActivityIndicator
-              accessibilityLabel="Deleting your account"
-              color={palette.textSecondary}
-            />
-          )}
           {accountDeletion.state === 'failed' && (
             <ErrorNotice
               error={accountDeletion.error}
@@ -269,6 +265,7 @@ ${usageReset}`
           <SettingsRow
             label="Connected AI apps"
             value="Manage apps that can ring and message you"
+            layout="stacked"
             onPress={() => router.push('/settings/connected-apps')}
             divider={voiceAccounts}
           />
@@ -276,6 +273,7 @@ ${usageReset}`
             <SettingsRow
               label="Your own voice accounts"
               value="Use your own Deepgram, Cartesia or xAI"
+              layout="stacked"
               onPress={() => router.push('/settings/voice-accounts')}
               divider={false}
             />
@@ -288,6 +286,7 @@ ${usageReset}`
           <SettingsRow
             label="Send feedback"
             value="Tell us what works and what doesn't"
+            layout="stacked"
             onPress={() => router.push('/settings/feedback')}
             divider={false}
           />
@@ -295,19 +294,31 @@ ${usageReset}`
       )}
 
       <SettingsGroup title="Privacy & data">
-        <Text style={[type.caption, styles.intro, { color: palette.textSecondary }]}>
+        <Text
+          style={[
+            type.caption,
+            styles.intro,
+            { color: palette.textSecondary, borderColor: palette.border },
+          ]}
+        >
           Twring does not record calls or keep call transcripts. Your chats are kept until you clear
           them.
         </Text>
         <SettingsRow
           label="Privacy"
           value="What Twring keeps, who processes it, and for how long"
+          layout="stacked"
           icon="globe"
           onPress={() => router.push('/privacy')}
         />
         <SettingsRow
           label="Delete my data"
-          value="Your agents, saved keys, and call history. Keeps your account."
+          value={
+            deletion.state === 'deleting'
+              ? 'Deleting your data…'
+              : 'Your agents, saved keys, and call history. Keeps your account.'
+          }
+          layout="stacked"
           accessibilityHint="Asks before deleting anything"
           onPress={busy ? undefined : confirmDelete}
           danger
@@ -316,17 +327,16 @@ ${usageReset}`
         {signedIn && !selfhosted && (
           <SettingsRow
             label="Delete account"
-            value="Deletes everything Twring keeps and signs you out"
+            value={
+              accountDeletion.state === 'deleting'
+                ? 'Deleting your account…'
+                : 'Deletes everything Twring keeps and signs you out'
+            }
+            layout="stacked"
             accessibilityHint="Asks twice before deleting anything"
             onPress={busy ? undefined : confirmDeleteAccount}
             danger
             divider={false}
-          />
-        )}
-        {deletion.state === 'deleting' && (
-          <ActivityIndicator
-            accessibilityLabel="Deleting your data"
-            color={palette.textSecondary}
           />
         )}
         {deletion.state === 'done' && (
@@ -361,11 +371,13 @@ ${usageReset}`
           <SettingsRow
             label="Call test line"
             value="Development builds only. Twring says back what it heard."
+            layout="stacked"
             onPress={() => startCall()}
           />
           <SettingsRow
             label="Component gallery"
             value="Preview shared components"
+            layout="stacked"
             onPress={() => router.push('/dev-components')}
             divider={false}
           />
@@ -380,7 +392,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.08)',
   },
   actions: { flexDirection: 'row' },
 });

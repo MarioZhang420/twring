@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useOnCall } from '@/call/on-call';
 import { type, usePalette } from '@/theme/tokens';
 
-import { TwringLockup, TwringWordmark } from './Brand';
+import { TwringLockup } from './Brand';
 import { IconButton } from './IconButton';
 import { OnCallChip } from './OnCallChip';
 
@@ -24,7 +24,6 @@ interface Props {
   /** Extra controls on the right of the header. */
   headerRight?: ReactNode;
   headerLeft?: ReactNode;
-  wordmark?: boolean;
   /** With `title`: one header row, the title on the left and the Twring lockup on the right. */
   brand?: boolean;
   refreshing?: boolean;
@@ -45,7 +44,6 @@ export function Screen({
   back,
   headerRight,
   headerLeft,
-  wordmark = false,
   brand = false,
   refreshing,
   onRefresh,
@@ -73,8 +71,7 @@ export function Screen({
       ) : onCall.active ||
         (back !== undefined && back !== false) ||
         headerLeft !== undefined ||
-        headerRight !== undefined ||
-        wordmark ? (
+        headerRight !== undefined ? (
         <View style={styles.header}>
           <View style={styles.headerSlot}>
             {headerLeft ??
@@ -82,7 +79,7 @@ export function Screen({
                 <IconButton icon="back" accessibilityLabel="Back" onPress={onBack} />
               ) : null)}
           </View>
-          <View style={styles.headerCenter}>{wordmark && <TwringWordmark size={20} />}</View>
+          <View style={styles.headerCenter} />
           <View style={styles.headerSlot}>{chip ?? headerRight}</View>
         </View>
       ) : null}
