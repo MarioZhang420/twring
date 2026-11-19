@@ -94,6 +94,8 @@ function fakeApi() {
     blockConnectedApp: vi.fn<TwringApi['blockConnectedApp']>(),
     allowConnectedApp: vi.fn<TwringApi['allowConnectedApp']>(),
     history: vi.fn<TwringApi['history']>(),
+    deleteHistoryItem: vi.fn<TwringApi['deleteHistoryItem']>(),
+    clearHistory: vi.fn<TwringApi['clearHistory']>(),
     registerDevice: vi.fn<TwringApi['registerDevice']>(),
     unregisterDevice: vi.fn<TwringApi['unregisterDevice']>(),
     ringSettings: vi.fn<TwringApi['ringSettings']>(),

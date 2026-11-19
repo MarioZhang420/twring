@@ -1,5 +1,12 @@
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type AccessibilityActionEvent,
+  type AccessibilityActionInfo,
+} from 'react-native';
 
 import { font } from '@/theme/fonts';
 import { radius, space, type, usePalette } from '@/theme/tokens';
@@ -17,6 +24,9 @@ interface Props {
   /** A 48 px control column; always reserved so every row's columns line up. */
   right?: ReactNode;
   onPress?: () => void;
+  onLongPress?: () => void;
+  accessibilityActions?: readonly AccessibilityActionInfo[];
+  onAccessibilityAction?: (event: AccessibilityActionEvent) => void;
   accessibilityLabel: string;
 }
 
@@ -33,6 +43,9 @@ export function ListRow({
   badge,
   right,
   onPress,
+  onLongPress,
+  accessibilityActions,
+  onAccessibilityAction,
   accessibilityLabel,
 }: Props) {
   const palette = usePalette();
@@ -96,17 +109,26 @@ export function ListRow({
   );
   return (
     <View style={[styles.row, { borderColor: palette.border }]}>
-      {onPress !== undefined ? (
+      {onPress !== undefined || onLongPress !== undefined ? (
         <Pressable
-          accessibilityRole="button"
+          {...(onPress !== undefined && { accessibilityRole: 'button' as const })}
           accessibilityLabel={accessibilityLabel}
+          accessibilityActions={accessibilityActions}
+          onAccessibilityAction={onAccessibilityAction}
           onPress={onPress}
+          onLongPress={onLongPress}
           style={({ pressed }) => [styles.main, { opacity: pressed ? 0.6 : 1 }]}
         >
           {main}
         </Pressable>
       ) : (
-        <View accessible accessibilityLabel={accessibilityLabel} style={styles.main}>
+        <View
+          accessible
+          accessibilityLabel={accessibilityLabel}
+          accessibilityActions={accessibilityActions}
+          onAccessibilityAction={onAccessibilityAction}
+          style={styles.main}
+        >
           {main}
         </View>
       )}

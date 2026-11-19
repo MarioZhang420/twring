@@ -481,6 +481,26 @@ describe('cord api client', () => {
     expect(calls[0]?.init.body).toBe('{"decision":"deny"}');
   });
 
+  it('deletes one Recents entry and clears them all', async () => {
+    const { api, calls } = client((url) =>
+      Promise.resolve(
+        String(url).endsWith('/history')
+          ? json(200, { deleted: 3 })
+          : new Response(null, { status: 204 }),
+      ),
+    );
+    await expect(api.deleteHistoryItem('call_1')).resolves.toBeUndefined();
+    expect(calls[0]?.url).toBe('https://api.cord.invalid/v1/calls/history/call_1');
+    expect(calls[0]?.init.method).toBe('DELETE');
+    await expect(api.clearHistory()).resolves.toEqual({ deleted: 3 });
+    expect(calls[1]?.url).toBe('https://api.cord.invalid/v1/calls/history');
+  });
+
+  it('rejects a malformed clear response', async () => {
+    const { api } = client(() => Promise.resolve(json(200, { deleted: -1 })));
+    await expect(api.clearHistory()).rejects.toBeInstanceOf(ApiError);
+  });
+
   it('deletes my data and parses the counts', async () => {
     const counts = {
       deleted: { agents: 2, credentials: 1, call_history: 7 },

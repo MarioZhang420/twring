@@ -236,6 +236,7 @@ describe('call history on every end path', () => {
       record: () => Promise.reject(new Error(`disk full; token=${TOKEN}`)),
       list: () => Promise.resolve([]),
       usageRollup: () => Promise.resolve([]),
+      delete: () => Promise.resolve(false),
       deleteAllForUser: () => Promise.resolve(0),
     };
     const g = gateway({ history: failing });
@@ -278,6 +279,7 @@ describe('call history on every end path', () => {
       },
       list: (userId, limit) => stores.history.list(userId, limit),
       usageRollup: (userId, sinceDay) => stores.history.usageRollup(userId, sinceDay),
+      delete: (userId, id) => stores.history.delete(userId, id),
       deleteAllForUser: (userId) => stores.history.deleteAllForUser(userId),
     };
     const g = gateway({ history: slow });

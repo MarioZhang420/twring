@@ -31,6 +31,7 @@ export default function TabsLayout() {
           title: 'Agents',
           tabBarIcon: icon('agents'),
           tabBarBadge: unread > 0 ? unread : undefined,
+          tabBarBadgeStyle: { backgroundColor: palette.accent, color: palette.onAccent },
         }}
       />
       <Tabs.Screen name="history" options={{ title: 'Recents', tabBarIcon: icon('history') }} />

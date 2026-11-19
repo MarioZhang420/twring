@@ -169,6 +169,8 @@ export interface CallHistoryRepository {
    * MAX_HISTORY_PER_USER); `sinceDay` (`YYYY-MM-DD`) drops earlier days. For later dashboards.
    */
   usageRollup(userId: string, sinceDay?: string): Promise<UsageRollup[]>;
+  /** Deletes one entry (`call_id`) of this user's call history; false when there was none. */
+  delete(userId: string, id: string): Promise<boolean>;
   /** Deletes this user's whole call history; resolves how many calls it held. */
   deleteAllForUser(userId: string): Promise<number>;
 }
@@ -404,6 +406,13 @@ export class CollectionCallHistoryRepository implements CallHistoryRepository {
       .filter((row) => sinceDay === undefined || row.started_at.slice(0, 10) >= sinceDay)
       .map(({ user_id: _userId, ...item }) => item);
     return rollupUsage(mine);
+  }
+
+  delete(userId: string, id: string): Promise<boolean> {
+    return this.rows.update((items) => {
+      const kept = items.filter((row) => row.user_id !== userId || row.call_id !== id);
+      return { items: kept, result: kept.length !== items.length };
+    });
   }
 
   deleteAllForUser(userId: string): Promise<number> {

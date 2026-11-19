@@ -8,6 +8,7 @@ import {
   type AgentListResponse,
   type AgentProtocol,
   type CallHistoryResponse,
+  type DeleteCallHistoryResponse,
   type ConnectionTestResponse,
   type ErrorCode,
   type ErrorResponse,
@@ -43,6 +44,8 @@ import { callWords } from './words';
 export { DEV_USER_ID };
 
 export const HISTORY_LIMIT = 50;
+/** Longest Recents entry id accepted by `DELETE /v1/calls/history/:id`. */
+const HISTORY_ID_MAX = 128;
 
 /** Connection tests per client per minute when not configured. */
 export const DEFAULT_TEST_RATE_PER_MINUTE = 6;
@@ -850,6 +853,37 @@ export function registerAgentRoutes(app: FastifyInstance, options: AgentRoutesOp
       const rateLimited = readLimited(request, reply);
       if (rateLimited) return rateLimited;
       return { calls: await stores.history.list(userFor(request), HISTORY_LIMIT) };
+    },
+  );
+
+  // Recents: one entry or the whole list. Chats, rings and daily limits are kept as they are.
+  app.delete<{ Params: { id: string } }>(
+    '/v1/calls/history/:id',
+    async (request, reply): Promise<FastifyReply> => {
+      if (stores === undefined) return unavailable(reply);
+      const rateLimited = limited(request, reply);
+      if (rateLimited) return rateLimited;
+      const id = request.params.id;
+      if (id.length === 0 || id.length > HISTORY_ID_MAX) {
+        return sendError(reply, 404, 'not_found', NOT_FOUND);
+      }
+      if (!(await stores.history.delete(userFor(request), id))) {
+        return sendError(reply, 404, 'not_found', NOT_FOUND);
+      }
+      request.log.info({ event: 'call_history_deleted', count: 1 }, 'recents entry deleted');
+      return reply.code(204).send();
+    },
+  );
+
+  app.delete(
+    '/v1/calls/history',
+    async (request, reply): Promise<DeleteCallHistoryResponse | FastifyReply> => {
+      if (stores === undefined) return unavailable(reply);
+      const rateLimited = limited(request, reply);
+      if (rateLimited) return rateLimited;
+      const deleted = await stores.history.deleteAllForUser(userFor(request));
+      request.log.info({ event: 'call_history_cleared', count: deleted }, 'recents cleared');
+      return { deleted };
     },
   );
 }

@@ -313,6 +313,11 @@ failed). A missed ring shows "Missed · {time}" in red with the agent's reason u
 round Call button to call back (an AI app gets a chat button instead). No transcript is kept or
 previewed.
 
+Long-press a row (or use the screen reader action "Delete from Recents") to delete that entry;
+"Clear all" on the summary line deletes the whole list. Both ask first, and neither touches chats
+(`DELETE /v1/calls/history/:id` answers 204 or 404; `DELETE /v1/calls/history` answers
+`{ deleted }`).
+
 ## 18. Settings
 
 One header row (title and Twring lockup), then groups: account, calls (whether agents can ring

@@ -8,6 +8,7 @@ import {
   agentSchema,
   callHistoryResponseSchema,
   connectionTestResponseSchema,
+  deleteCallHistoryResponseSchema,
   errorResponseSchema,
   voiceListResponseSchema,
 } from '@twring/contracts';
@@ -15,6 +16,7 @@ import { gatewayEnvFixture } from '@twring/test-fixtures';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildApp } from '../app';
+import { AuthError, createRequestAuth } from '../auth';
 import { StoreCorruptError } from '../store/collection';
 import { MAX_AGENTS_PER_USER } from '../store/record-limits';
 import { createMemoryStores, type Stores } from '../store/repositories';
@@ -562,6 +564,89 @@ describe('GET /v1/calls/history', () => {
     const body = callHistoryResponseSchema.parse((await send('GET', '/v1/calls/history')).json());
     expect(body.calls).toHaveLength(50);
     expect(body.calls[0]?.duration_s).toBe(54);
+  });
+});
+
+describe('DELETE /v1/calls/history', () => {
+  function historySetup() {
+    const stores = createMemoryStores(KEYS);
+    const app = buildApp({
+      env: loadGatewayEnv(gatewayEnvFixture()),
+      onError: () => undefined,
+      agents: { stores, policy: { env: 'development' }, writeRatePerMinute: 100 },
+      auth: createRequestAuth((request) => {
+        const token = request.headers.authorization;
+        if (!token) throw new AuthError(401, 'auth_required', 'Sign in.');
+        return Promise.resolve(token === 'Bearer bob' ? 'bob' : 'alice');
+      }),
+    });
+    cleanups.push(() => app.close());
+    const send = (method: 'GET' | 'DELETE', url: string, user?: string) =>
+      app.inject({
+        method,
+        url,
+        remoteAddress: '203.0.113.9',
+        ...(user !== undefined && { headers: { authorization: `Bearer ${user}` } }),
+      });
+    const record = (userId: string, callId: string) =>
+      stores.history.record(userId, {
+        call_id: callId,
+        agent_id: 'agt_aaaaaaaaaaaaaaaaaaaa',
+        agent_name: 'Operator',
+        started_at: '2026-01-01T00:00:00.000Z',
+        duration_s: 5,
+        outcome: 'completed',
+      });
+    const ids = async (user: string) =>
+      callHistoryResponseSchema
+        .parse((await send('GET', '/v1/calls/history', user)).json())
+        .calls.map((c) => c.call_id);
+    return { send, record, ids };
+  }
+
+  it('deletes one entry of the caller and leaves other people alone', async () => {
+    const { send, record, ids } = historySetup();
+    await record('alice', 'call_aaaaaaaaaaaaaaaaaaa1');
+    await record('alice', 'call_aaaaaaaaaaaaaaaaaaa2');
+    await record('bob', 'call_bbbbbbbbbbbbbbbbbbb1');
+    expect(
+      (await send('DELETE', '/v1/calls/history/call_aaaaaaaaaaaaaaaaaaa1', 'alice')).statusCode,
+    ).toBe(204);
+    expect(await ids('alice')).toEqual(['call_aaaaaaaaaaaaaaaaaaa2']);
+    expect(await ids('bob')).toEqual(['call_bbbbbbbbbbbbbbbbbbb1']);
+  });
+
+  it("answers 404 for someone else's entry, an unknown id or one too long", async () => {
+    const { send, record, ids } = historySetup();
+    await record('bob', 'call_bbbbbbbbbbbbbbbbbbb1');
+    const res = await send('DELETE', '/v1/calls/history/call_bbbbbbbbbbbbbbbbbbb1', 'alice');
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toMatchObject({ error: { code: 'not_found' } });
+    expect(await ids('bob')).toEqual(['call_bbbbbbbbbbbbbbbbbbb1']);
+    const long = `/v1/calls/history/${'x'.repeat(129)}`;
+    // Fastify's router refuses very long params (414) before the route's own 128 check.
+    expect([404, 414]).toContain((await send('DELETE', long, 'alice')).statusCode);
+  });
+
+  it('clears the whole list and returns the count', async () => {
+    const { send, record, ids } = historySetup();
+    await record('alice', 'call_aaaaaaaaaaaaaaaaaaa1');
+    await record('alice', 'call_aaaaaaaaaaaaaaaaaaa3');
+    await record('bob', 'call_bbbbbbbbbbbbbbbbbbb1');
+    const res = await send('DELETE', '/v1/calls/history', 'alice');
+    expect(res.statusCode).toBe(200);
+    expect(deleteCallHistoryResponseSchema.parse(res.json())).toEqual({ deleted: 2 });
+    expect(await ids('alice')).toEqual([]);
+    expect(await ids('bob')).toEqual(['call_bbbbbbbbbbbbbbbbbbb1']);
+  });
+
+  it('refuses without sign-in, like GET', async () => {
+    const { send } = historySetup();
+    expect((await send('GET', '/v1/calls/history')).statusCode).toBe(401);
+    expect((await send('DELETE', '/v1/calls/history')).statusCode).toBe(401);
+    expect((await send('DELETE', '/v1/calls/history/call_aaaaaaaaaaaaaaaaaaa1')).statusCode).toBe(
+      401,
+    );
   });
 });
 import { createServer } from 'node:http';

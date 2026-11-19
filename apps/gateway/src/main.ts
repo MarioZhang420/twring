@@ -356,6 +356,7 @@ const calls: LiveKitCalls | undefined =
         list: (userId: string, limit: number) => stores.history.list(userId, limit),
         usageRollup: (userId: string, sinceDay?: string) =>
           stores.history.usageRollup(userId, sinceDay),
+        delete: (userId: string, id: string) => stores.history.delete(userId, id),
         deleteAllForUser: (userId: string) => stores.history.deleteAllForUser(userId),
       },
     }),
