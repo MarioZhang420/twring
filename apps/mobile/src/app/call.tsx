@@ -41,22 +41,22 @@ import {
   statusLabel,
 } from '@/call/labels';
 import { audioRoutes, callController, useAudioRoutes, useCallView } from '@/call/session';
+import { activeWave, hearingLabel, ringKey } from '@/call/portrait';
 import { callLook, waveIntensity } from '@/call/wave';
 import { ApprovalCard } from '@/components/ApprovalCard';
+import { Avatar } from '@/components/Avatar';
 import { CallControl } from '@/components/CallControl';
 import { CallFeedback } from '@/components/call/CallFeedback';
-import { CallOrb } from '@/components/CallOrb';
 import { ConnectionPill } from '@/components/ConnectionPill';
 import { GhostButton } from '@/components/GhostButton';
 import { Icon, type IconName } from '@/components/Icon';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { Sheet } from '@/components/Sheet';
-import { StatusPill } from '@/components/StatusPill';
 import { Waveform } from '@/components/Waveform';
 import { showAudioRoutePicker } from '@/platform/audio-route';
 import { ringPlatform } from '@/platform/ring';
 import { connectionPill } from '@/theme/call-visuals';
-import { callPalette as palette, space, type, radius } from '@/theme/tokens';
+import { callPalette as palette, space, type } from '@/theme/tokens';
 
 function useNow(enabled: boolean, ms = 1000): number {
   const [now, setNow] = useState(() => Date.now());
@@ -89,13 +89,7 @@ function HearingLabel({ view }: { view: CallView }) {
   const now = useNow(true);
   const fresh = view.inbound !== undefined && now - view.inbound.at < INBOUND_STALE_MS;
   const hearing = fresh && view.inbound!.peakDbfs > SPEECH_FLOOR_DBFS;
-  const label = view.muted
-    ? 'You are muted'
-    : !fresh
-      ? 'Waiting for audio…'
-      : hearing
-        ? 'Twring hears you'
-        : 'Say something';
+  const label = hearingLabel({ status: view.call.status, muted: view.muted, fresh, hearing });
   return (
     <Text
       accessibilityLabel={`Microphone at Twring: ${label}`}
@@ -227,52 +221,23 @@ function RouteSheet({ visible, onClose }: { visible: boolean; onClose: () => voi
   );
 }
 
-function MiniControl({
-  icon,
-  label,
-  active,
-  expanded,
-  disabled,
-  onPress,
-}: {
-  icon: IconName;
-  label: string;
-  active?: boolean;
-  expanded?: boolean;
-  disabled?: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole={active === undefined ? 'button' : 'switch'}
-      accessibilityLabel={label}
-      accessibilityState={{ checked: active, expanded, disabled }}
-      disabled={disabled}
-      onPress={onPress}
-      style={styles.miniHit}
-    >
-      <View style={[styles.miniCircle, active && styles.miniActive]}>
-        <Icon
-          name={icon}
-          size={14}
-          color={active ? palette.background : palette.textSecondary}
-          strokeWidth={1.9}
-        />
-      </View>
-    </Pressable>
-  );
-}
-
 function ActiveCall({
   view,
   title,
   location,
+  agentId,
+  avatarVersion,
 }: {
   view: CallView;
   title: string;
   location?: string;
+  agentId?: string;
+  avatarVersion?: number;
 }) {
-  const { fontScale } = useWindowDimensions();
+  const { fontScale, height: windowHeight } = useWindowDimensions();
+  const compact = windowHeight < 700;
+  const avatarSize = compact ? 80 : 104;
+  const waveHeight = compact ? 56 : 78;
   const connected = view.connectedAt !== undefined;
   const routes = useAudioRoutes();
   const [routesOpen, setRoutesOpen] = useState(false);
@@ -285,6 +250,16 @@ function ActiveCall({
   const polling = connected && !ending;
   const detail = detailText(view.call);
   const look = callLook(status, view.muted, detail !== undefined);
+  const ringColor = palette[ringKey(look)];
+  const wave = activeWave(look);
+  const live = look.orb !== 'connecting' && look.orb !== 'reconnecting';
+  const showMuted = view.muted && status !== 'RECONNECTING';
+  const statusText = showMuted ? 'You are muted' : statusLabel(view.call, view.connectedAt);
+  const statusColor = showMuted
+    ? palette.textSecondary
+    : look.orb === 'idle' || look.orb === 'connecting'
+      ? palette.textPrimary
+      : ringColor;
 
   useEffect(() => {
     if (!polling) return;
@@ -346,50 +321,91 @@ function ActiveCall({
         <View style={styles.topSlot} />
       </View>
 
-      <View style={styles.panels}>
-        <View style={styles.speakerPanel}>
-          <View style={styles.panelHeader}>
-            <View style={styles.speakerName}>
-              <View
-                style={[
-                  styles.speakerDot,
-                  {
-                    backgroundColor: look.who === 'agent' ? palette.speaking : palette.textTertiary,
-                  },
-                ]}
-              />
-              <Text
-                numberOfLines={1}
-                style={[
-                  type.microLabel,
-                  styles.agentName,
-                  { color: look.who === 'agent' ? palette.textPrimary : palette.textTertiary },
-                ]}
-              >
-                {title.toUpperCase()}
-              </Text>
-            </View>
-            {location !== undefined && (
-              <Text style={[type.caption, styles.serverLabel]}>{location}</Text>
-            )}
-          </View>
+      <View style={styles.body}>
+        <View style={styles.portrait}>
           <View
-            style={styles.waveFrame}
-            onLayout={(event) => setWaveWidth(event.nativeEvent.layout.width)}
+            style={[
+              styles.ring,
+              {
+                width: avatarSize + 12,
+                height: avatarSize + 12,
+                borderRadius: (avatarSize + 12) / 2,
+                borderColor: ringColor,
+                // Hex colours only: the working and connecting greys are rgba and never glow.
+                boxShadow:
+                  live && !reducedMotion && ringColor.startsWith('#')
+                    ? `0 0 24px ${ringColor}55`
+                    : undefined,
+              },
+            ]}
           >
-            {waveWidth > 0 && (
-              <Waveform
-                color={palette.speaking}
-                intensity={agentIntensity}
-                width={waveWidth}
-                height={78}
-                mode={look.agentWave}
-              />
-            )}
+            <Avatar
+              id={agentId ?? title}
+              name={title}
+              avatarVersion={avatarVersion}
+              size={avatarSize}
+            />
           </View>
+          <Text numberOfLines={1} style={[type.title, styles.name]}>
+            {title}
+          </Text>
+          <Text numberOfLines={1} style={[type.caption, styles.serverLabel]}>
+            {location ?? ' '}
+          </Text>
+        </View>
+
+        <View accessibilityLiveRegion="polite" style={styles.statusBlock}>
+          <Text
+            numberOfLines={1}
+            style={[
+              type.headline,
+              styles.statusLabel,
+              { color: statusColor },
+              status === 'AGENT_WORKING' && !showMuted && styles.italic,
+            ]}
+          >
+            {statusText || ' '}
+          </Text>
+          <Text numberOfLines={1} style={[type.caption, styles.detail]}>
+            {detail ?? ' '}
+          </Text>
           <View style={styles.clockRow}>
             {view.connectedAt !== undefined && <CallClock connectedAt={view.connectedAt} />}
           </View>
+        </View>
+
+        <View
+          style={[styles.waveFrame, { height: waveHeight }]}
+          onLayout={(event) => setWaveWidth(event.nativeEvent.layout.width)}
+        >
+          {waveWidth > 0 && (
+            <Waveform
+              color={
+                wave.who === 'agent'
+                  ? palette.speaking
+                  : wave.who === 'you'
+                    ? palette.userSpeaking
+                    : palette.textTertiary
+              }
+              intensity={wave.who === 'you' ? youIntensity : agentIntensity}
+              width={waveWidth}
+              height={waveHeight}
+              mode={wave.mode}
+            />
+          )}
+        </View>
+
+        <View style={styles.captions}>
+          <Text
+            numberOfLines={1}
+            style={[
+              type.microLabel,
+              styles.speakerLabel,
+              { color: look.who === 'agent' ? palette.textPrimary : palette.textTertiary },
+            ]}
+          >
+            {title.toUpperCase()}
+          </Text>
           <View
             accessibilityLiveRegion="polite"
             style={[styles.replyFrame, { height: REPLY_LINES * REPLY_LINE_HEIGHT * fontScale }]}
@@ -410,52 +426,7 @@ function ActiveCall({
               </Text>
             )}
           </View>
-        </View>
-
-        <View style={styles.centerRow}>
-          {connected ? (
-            <MiniControl
-              icon={view.muted ? 'micOff' : 'mic'}
-              label="Mute microphone"
-              active={view.muted}
-              disabled={ending}
-              onPress={toggleMute}
-            />
-          ) : (
-            <View style={styles.miniHit} />
-          )}
-          <CallOrb mode={look.orb} />
-          {connected ? (
-            <MiniControl
-              icon={audioIcon}
-              label={audioLabel}
-              expanded={routesOpen}
-              disabled={ending}
-              onPress={chooseAudio}
-            />
-          ) : (
-            <View style={styles.miniHit} />
-          )}
-        </View>
-
-        <View style={styles.speakerPanel}>
-          <View style={styles.panelHeader}>
-            <View style={styles.speakerName}>
-              <View style={[styles.speakerDot, { backgroundColor: palette.accent }]} />
-              <Text style={[type.microLabel, styles.youName]}>YOU</Text>
-            </View>
-          </View>
-          <View style={styles.waveFrame}>
-            {waveWidth > 0 && (
-              <Waveform
-                color={palette.userSpeaking}
-                intensity={youIntensity}
-                width={waveWidth}
-                height={78}
-                mode={look.youWave}
-              />
-            )}
-          </View>
+          <Text style={[type.microLabel, styles.speakerLabel, styles.youName]}>YOU</Text>
           <View
             accessibilityLiveRegion="polite"
             style={[
@@ -487,6 +458,7 @@ function ActiveCall({
             onAccessibilityTap={() => {
               if (!ending) toggleMute();
             }}
+            style={styles.sideSlot}
           >
             <CallControl
               icon={view.muted ? 'micOff' : 'mic'}
@@ -499,33 +471,7 @@ function ActiveCall({
             />
           </View>
         ) : (
-          <View style={styles.controlSlot} />
-        )}
-        {connected ? (
-          <View
-            accessible
-            accessibilityRole="button"
-            accessibilityLabel={audioLabel}
-            accessibilityHint="Choose speaker, phone, or headset"
-            accessibilityState={{
-              disabled: ending,
-              expanded: routesOpen,
-            }}
-            onAccessibilityTap={() => {
-              if (!ending) chooseAudio();
-            }}
-          >
-            <CallControl
-              icon={audioIcon}
-              label="Audio"
-              accessibilityLabel={audioLabel}
-              onPress={() => {
-                if (!ending) chooseAudio();
-              }}
-            />
-          </View>
-        ) : (
-          <View style={styles.controlSlot} />
+          <View style={styles.sideSlot} />
         )}
         <View
           accessible
@@ -541,25 +487,42 @@ function ActiveCall({
             label="End"
             accessibilityLabel="End call"
             variant="danger"
+            size="large"
             onPress={() => {
               if (!ending) void callController()?.hangUp();
             }}
           />
         </View>
+        {connected ? (
+          <View
+            accessible
+            accessibilityRole="button"
+            accessibilityLabel={audioLabel}
+            accessibilityHint="Choose speaker, phone, or headset"
+            accessibilityState={{
+              disabled: ending,
+              expanded: routesOpen,
+            }}
+            onAccessibilityTap={() => {
+              if (!ending) chooseAudio();
+            }}
+            style={styles.sideSlot}
+          >
+            <CallControl
+              icon={audioIcon}
+              label="Audio"
+              accessibilityLabel={audioLabel}
+              onPress={() => {
+                if (!ending) chooseAudio();
+              }}
+            />
+          </View>
+        ) : (
+          <View style={styles.sideSlot} />
+        )}
       </View>
 
-      <View style={styles.statusArea}>
-        <StatusPill
-          label={
-            view.muted && status !== 'RECONNECTING'
-              ? 'You are muted'
-              : statusLabel(view.call, view.connectedAt)
-          }
-          detail={detail}
-          reserveDetail
-          tone={look.pill.tone}
-          active={look.pill.active}
-        />
+      <View style={styles.hearingArea}>
         {connected ? <HearingLabel view={view} /> : <Text style={styles.hearing}> </Text>}
       </View>
 
@@ -726,6 +689,8 @@ export default function CallScreen() {
           view={view}
           title={title}
           location={callAgentLocation(agent?.id === agentId ? agent : undefined)}
+          agentId={agentId}
+          avatarVersion={agent?.id === agentId ? agent?.avatar_version : undefined}
         />
       ) : view.call.status === 'IDLE' ? (
         <>
@@ -754,22 +719,21 @@ const styles = StyleSheet.create({
   topSlot: { width: 36, height: 36 },
   minimize: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
   connectionSlot: { height: 32 },
-  panels: { flex: 1, minHeight: 0 },
-  speakerPanel: { flex: 1, minHeight: 0, justifyContent: 'center' },
-  panelHeader: {
-    minHeight: 24,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  speakerName: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
-  speakerDot: { width: 6, height: 6, borderRadius: 3 },
-  agentName: { letterSpacing: 1.6, flexShrink: 1 },
-  youName: { color: palette.accent, letterSpacing: 1.6 },
-  serverLabel: { color: palette.textTertiary },
-  waveFrame: { width: '100%', height: 78, justifyContent: 'center', marginVertical: 6 },
-  clockRow: { minHeight: 18, alignItems: 'flex-end' },
-  clock: { color: palette.textPrimary, textAlign: 'right', fontVariant: ['tabular-nums'] },
+  body: { flex: 1, minHeight: 0, justifyContent: 'space-evenly' },
+  portrait: { alignItems: 'center', gap: 6 },
+  ring: { borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+  name: { color: palette.textPrimary, textAlign: 'center' },
+  serverLabel: { color: palette.textTertiary, textAlign: 'center' },
+  statusBlock: { alignItems: 'center', gap: 2 },
+  statusLabel: { textAlign: 'center' },
+  italic: { fontStyle: 'italic' },
+  detail: { color: palette.textSecondary, textAlign: 'center' },
+  clockRow: { minHeight: 18, alignItems: 'center' },
+  clock: { color: palette.textTertiary, textAlign: 'center', fontVariant: ['tabular-nums'] },
+  waveFrame: { width: '100%', justifyContent: 'center' },
+  captions: { alignItems: 'stretch' },
+  speakerLabel: { letterSpacing: 1.6, textAlign: 'center' },
+  youName: { color: palette.accent, marginTop: 4 },
   replyFrame: {
     paddingHorizontal: 4,
     overflow: 'hidden',
@@ -784,25 +748,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   notice: { color: palette.reconnecting, textAlign: 'center' },
-  centerRow: {
-    minHeight: 64,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 10,
-  },
-  miniHit: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
-  miniCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.pill,
-    backgroundColor: palette.surface,
-    borderWidth: 1,
-    borderColor: palette.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  miniActive: { backgroundColor: palette.textPrimary, borderWidth: 0 },
   captionFrame: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   caption: {
     color: palette.textTertiary,
@@ -814,11 +759,11 @@ const styles = StyleSheet.create({
   controls: {
     flexDirection: 'row',
     justifyContent: 'space-evenly',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     paddingVertical: 10,
   },
-  controlSlot: { minWidth: 64 },
-  statusArea: { alignItems: 'stretch', paddingTop: 2, paddingBottom: 6, gap: 6 },
+  sideSlot: { width: 72, alignItems: 'center' },
+  hearingArea: { paddingTop: 2, paddingBottom: 6 },
   hearing: { color: palette.textTertiary, textAlign: 'center' },
   routeRow: {
     minHeight: 56,
