@@ -1,64 +1,52 @@
 import type { Agent } from '@twring/contracts';
-import { router } from 'expo-router';
-import { useCallback, useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { agentStatusLine, orderAgents } from '@/agents/order';
-import { canCall } from '@/agents/ai-app';
+import { homeRow } from '@/agents/home-rows';
 import { twringApi } from '@/api';
 import { startCall } from '@/call/start';
 import { Avatar } from '@/components/Avatar';
+import { CallButton } from '@/components/CallButton';
 import { ErrorNotice } from '@/components/ErrorNotice';
-import { GhostButton } from '@/components/GhostButton';
 import { Icon } from '@/components/Icon';
+import { ListRow } from '@/components/ListRow';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { Screen } from '@/components/Screen';
 import { Skeleton } from '@/components/Skeleton';
 import { mobileEnv } from '@/config/env';
 import { STATUS_POLL_MS, useResource } from '@/hooks/useResource';
 import { onboardingSeen, shouldShowOnboarding } from '@/onboarding/state';
-import { useChatList } from '@/threads/chats';
+import { unseenMissed } from '@/ring/missed';
+import { markMissedSeen, missedLastSeen } from '@/ring/missed-seen';
 import { radius, space, type, usePalette } from '@/theme/tokens';
+import { useChatList } from '@/threads/chats';
+import { sortChatAgents } from '@/threads/presentation';
 
-function AgentCard({ agent }: { agent: Agent }) {
-  const palette = usePalette();
-  const status = agentStatusLine(agent);
-  return (
-    <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-      <Pressable
-        accessible
-        accessibilityRole="button"
-        accessibilityLabel={`${agent.name}, ${status}`}
-        onPress={() => router.push({ pathname: '/agents/[id]', params: { id: agent.id } })}
-        style={styles.cardBody}
-      >
-        <Avatar
-          id={agent.id}
-          name={agent.name}
-          avatarVersion={agent.avatar_version}
-          size={56}
-          online={agent.protocol === 'cord-connector' ? status === 'Online' : undefined}
-        />
-        <View style={styles.cardText}>
-          <Text style={[type.headline, { color: palette.textPrimary }]}>{agent.name}</Text>
-          <Text style={[type.caption, { color: palette.textSecondary }]}>{status}</Text>
-        </View>
-      </Pressable>
-      {canCall(agent) && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Call ${agent.name}`}
-          onPress={() => startCall({ agentId: agent.id, name: agent.name })}
-          style={[
-            styles.call,
-            { backgroundColor: palette.surfaceRaised, borderColor: palette.borderAccent },
-          ]}
-        >
-          <Icon name="phone" size={24} color={palette.accent} />
-        </Pressable>
-      )}
-    </View>
+/** Agents with a missed ring the owner has not seen yet, and a way to mark them all seen. */
+function useUnseenMissed(): [ReadonlySet<string>, () => void] {
+  const [missed, setMissed] = useState<ReadonlySet<string>>(new Set());
+  useFocusEffect(
+    useCallback(() => {
+      const api = twringApi();
+      if (!api) return;
+      const controller = new AbortController();
+      void Promise.all([api.history(controller.signal), missedLastSeen()])
+        .then(([entries, seen]) => {
+          if (!controller.signal.aborted)
+            setMissed(new Set(unseenMissed(entries, seen).map((entry) => entry.agent_id)));
+        })
+        .catch(() => undefined);
+      return () => controller.abort();
+    }, []),
   );
+  return [
+    missed,
+    () => {
+      setMissed(new Set());
+      void markMissedSeen();
+    },
+  ];
 }
 
 export default function AgentsScreen() {
@@ -69,6 +57,7 @@ export default function AgentsScreen() {
   );
   const agents = useResource(load, { pollMs: STATUS_POLL_MS });
   const chats = useChatList();
+  const [missed, markSeen] = useUnseenMissed();
   useEffect(() => {
     if (agents.data && shouldShowOnboarding(agents.data.length, onboardingSeen()))
       router.replace('/onboarding');
@@ -81,11 +70,13 @@ export default function AgentsScreen() {
         </Text>
       </Screen>
     );
-  const sorted = orderAgents(agents.data ?? [], chats.threads);
+  const sorted = sortChatAgents(agents.data ?? [], chats.threads);
+  const summaries = new Map(chats.threads.map((thread) => [thread.agent_id, thread]));
   const empty = agents.data?.length === 0;
   return (
     <Screen
-      wordmark
+      brand
+      title="Agents"
       refreshing={agents.refreshing}
       onRefresh={() => {
         agents.reload({ refresh: true });
@@ -97,60 +88,97 @@ export default function AgentsScreen() {
         ) : undefined
       }
     >
-      <Text accessibilityRole="header" style={[type.screenTitle, { color: palette.textPrimary }]}>
-        Agents
-      </Text>
       {agents.loading && (
         <View
           accessibilityRole="progressbar"
           accessibilityLabel="Loading agents"
-          style={styles.list}
+          style={styles.loading}
         >
           {[0, 1, 2].map((item) => (
-            <Skeleton key={item} height={88} />
+            <Skeleton key={item} height={72} />
           ))}
         </View>
       )}
       {agents.error && <ErrorNotice error={agents.error} onRetry={() => agents.reload()} />}
       {empty && (
-        <Text style={[type.body, styles.empty, { color: palette.textSecondary }]}>
-          Your agents will appear here. Connect one and Twring will make it callable.
+        <Text style={[type.body, { color: palette.textSecondary, textAlign: 'center' }]}>
+          {chats.off
+            ? 'No agents yet. Connect one to call it.'
+            : 'No agents yet. Connect one to start a chat or call.'}
         </Text>
       )}
-      <View style={styles.list}>
-        {sorted.map((agent) => (
-          <AgentCard key={agent.id} agent={agent} />
-        ))}
+      <View>
+        {sorted.map((agent) => {
+          const row = homeRow(agent, summaries.get(agent.id), missed, chats.off);
+          return (
+            <ListRow
+              key={agent.id}
+              avatar={
+                <Avatar
+                  id={agent.id}
+                  name={agent.name}
+                  avatarVersion={agent.avatar_version}
+                  size={48}
+                  online={row.aiApp ? undefined : !row.offline}
+                />
+              }
+              title={agent.name}
+              titleTone={row.offline ? 'secondary' : 'primary'}
+              meta={row.time}
+              metaTone={row.unread ? 'accent' : 'tertiary'}
+              line={row.line}
+              lineTone={row.lineTone}
+              badge={row.unread}
+              accessibilityLabel={row.accessibilityLabel}
+              onPress={() => {
+                if (row.missed) markSeen();
+                router.push(
+                  chats.available
+                    ? { pathname: '/chats/[agentId]', params: { agentId: agent.id } }
+                    : { pathname: '/agents/[id]', params: { id: agent.id } },
+                );
+              }}
+              right={
+                row.call === 'none' ? undefined : (
+                  <CallButton
+                    name={agent.name}
+                    variant="outline"
+                    disabled={row.call === 'disabled'}
+                    onPress={() => {
+                      if (row.missed) markSeen();
+                      startCall({ agentId: agent.id, name: agent.name });
+                    }}
+                  />
+                )
+              }
+            />
+          );
+        })}
+        {sorted.length > 0 && (
+          <ListRow
+            avatar={
+              <View style={[styles.add, { borderColor: palette.borderAccent }]}>
+                <Icon name="add" size={22} color={palette.accent} />
+              </View>
+            }
+            title="Connect another agent"
+            accessibilityLabel="Connect another agent"
+            onPress={() => router.push('/connect')}
+          />
+        )}
       </View>
-      {sorted.length > 0 && (
-        <View style={styles.add}>
-          <GhostButton label="Connect another agent" onPress={() => router.push('/connect')} />
-        </View>
-      )}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  list: { gap: space.sm },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: radius.lg,
-    padding: space.md,
-    gap: space.sm,
-  },
-  cardBody: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.md, minWidth: 0 },
-  cardText: { flex: 1, gap: space.xs },
-  call: {
-    width: 56,
-    height: 56,
+  loading: { gap: space.sm },
+  add: {
+    width: 48,
+    height: 48,
     borderRadius: radius.pill,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  empty: { textAlign: 'center' },
-  add: { alignItems: 'center', marginTop: space.lg },
 });

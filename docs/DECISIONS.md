@@ -1179,3 +1179,27 @@ On 2026-11-17, 10 people had signed in more than a day earlier and never connect
 - The Play Data safety form lists "developer communications" for the email address; mirror it in
   the Play Console when the listing resumes.
 - Hosted Twring only: it needs the invite email settings and saved agents.
+
+## ADR-040: Agents and Chats are one list (2026-11-19)
+
+### Context
+
+The app had an Agents tab and a Chats tab. Both listed the same agents: one with a call button,
+the other with the last message. People had to pick a tab to do the same thing, missed calls sat
+in cards above the Chats list, and with chats off the Chats tab was titled Agents.
+
+### Decision
+
+- Three tabs: Agents, Recents, Settings. The Agents tab carries the unread badge.
+- Agents is one list: each row shows the chat preview, the unread count and a Call button
+  (greyed when offline, none for AI apps). Tapping a row opens the chat, or the agent page when
+  chats are off.
+- An unseen missed ring shows as "Missed call" on that agent's row instead of a card above the
+  list. Tapping the row, calling, or opening Recents marks missed calls seen.
+
+### Consequences
+
+- One place to call or chat with an agent; no screen lists the same agents twice.
+- Marking seen is still one shared timestamp, so seeing one agent's missed call clears the red
+  line on every row.
+- Links to the old Chats tab no longer exist; chat screens still open from a row or a notification.

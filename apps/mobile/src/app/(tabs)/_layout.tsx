@@ -25,12 +25,11 @@ export default function TabsLayout() {
         tabBarStyle: { backgroundColor: palette.background, borderTopColor: palette.border },
       }}
     >
-      <Tabs.Screen name="index" options={{ title: 'Agents', tabBarIcon: icon('agents') }} />
       <Tabs.Screen
-        name="chats"
+        name="index"
         options={{
-          title: 'Chats',
-          tabBarIcon: icon('chat'),
+          title: 'Agents',
+          tabBarIcon: icon('agents'),
           tabBarBadge: unread > 0 ? unread : undefined,
         }}
       />

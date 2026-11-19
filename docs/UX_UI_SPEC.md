@@ -33,17 +33,20 @@ The user should feel they are talking to the same agent they connected, not a se
 ```text
 Auth
 └── Tabs
-    ├── Agents (home)
+    ├── Agents (home: one list of agents and their chats)
+    │   ├── Chat (when chats are on)
     │   ├── Agent Detail
     │   │   ├── Call
     │   │   ├── Connection
     │   │   ├── Voice
     │   │   └── Advanced
     │   └── Connect Agent
-    ├── Chats
     ├── Recents (call history)
     └── Settings
 ```
+
+Three tabs: Agents, Recents, Settings. The Agents tab badge is the total unread chat count.
+There is no separate Chats tab (ADR-040).
 
 A screen's title is the name on the tab or row that opened it. (Audit 2026-11-12: the Recents tab opened a screen titled Call history; the screen is now titled Recents.)
 
@@ -82,17 +85,23 @@ Explain why mic permission is required before triggering OS prompt.
 
 ## 5. Home / agent list
 
-Agent card:
+One list, titled Agents, with one row per agent, newest activity first:
 
 ```text
-[Avatar] Operator
-         Online
-
-         Call
+[Avatar•] Operator                 14:02  [Call]
+          Done, the PR is open.      (2)
 ```
 
-Computer agents show Online or Offline. Server agents show Server agent. Connection details
-stay in advanced detail.
+- Avatar with an online dot (none for AI apps), name, time of the last activity.
+- Second line: the chat preview. With chats off it says what a tap does: "Ready to call" or
+  "Offline · start it on your computer".
+- An unseen missed ring turns that agent's line into "Missed call" in red until the owner taps
+  the row, calls it, or opens Recents. Nothing is inserted above the list.
+- Unread badge from the chat.
+- Right column: a Call button for agents you can call, greyed when the agent is offline,
+  empty for AI apps.
+- Tap the row: the chat when chats are on, otherwise the agent page.
+- The last row is "Connect another agent".
 
 Primary empty-state CTA: `Connect Agent`.
 
