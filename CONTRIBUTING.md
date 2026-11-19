@@ -2,6 +2,27 @@
 
 Thanks for helping. Twring lets you call the AI agents you already run, and lets them call you.
 
+## Where help is most welcome
+
+- **Connecting more agents.** Plugins and examples that let another agent framework talk to
+  Twring, like the Hermes plugin in `integrations/hermes` and the example in `examples/`. The
+  protocols are in `docs/AGENT_ADAPTER_SPEC.md`.
+- **Self-hosting on more machines.** Try the installer on hardware we have not (arm64 boards,
+  home servers, other Linux distributions) and report what happened, or fix the docs.
+- **Docs and examples.** Anything that makes connecting an agent quicker to understand.
+- **Bug reports with steps and logs.** Use the bug report form.
+
+Look for issues labelled `good first issue` or `help wanted`. For anything bigger, open an issue
+first so we can agree on the approach before you write code.
+
+The call pipeline, the shared contracts, sign-in and security code change often and carry every
+call, so changes there come from the maintainers for now. Bug reports about them are welcome.
+
+## How reviews work
+
+A maintainer reviews every pull request; first-time contributors' checks start after a
+maintainer approves them. Replies can take a few days.
+
 ## Set up
 
 - Node 24 and pnpm (through corepack: `corepack enable`).

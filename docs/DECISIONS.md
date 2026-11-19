@@ -1203,3 +1203,29 @@ in cards above the Chats list, and with chats off the Chats tab was titled Agent
 - Marking seen is still one shared timestamp, so seeing one agent's missed call clears the red
   line on every row.
 - Links to the old Chats tab no longer exist; chat screens still open from a row or a notification.
+
+## ADR-041: Outside contributions under DCO only (2026-11-19)
+
+### Context
+
+The repository is public and starting to get visitors. Contributions need a clear legal basis,
+and outside pull requests need a review path that does not slow the maintainers' own work.
+
+### Decision
+
+- Contributions stay under the Developer Certificate of Origin (`git commit -s`), with no
+  contributor licence agreement. Each contribution keeps the licence of the folder it changes.
+- Contributions are invited at the edges: agent integrations and examples, self-hosting on more
+  machines, docs, and bug reports. The call pipeline, contracts, sign-in and security code stay
+  with the maintainers for now.
+- A maintainer reviews every outside pull request. First-time contributors' workflows need
+  approval before they run, and outside pull requests are never auto-merged. Replies are drafted
+  and posted only after the owner approves each one.
+
+### Consequences
+
+- Outside code in the AGPL-3.0 folders stays AGPL-3.0: Twring cannot later relicense those parts
+  under other terms without each contributor's consent.
+- Contributors need no paperwork beyond the sign-off.
+- Every reply waits for the owner, so answers can take a day or more.
+
