@@ -33,11 +33,11 @@ jobs:
         run: |
           python -m pip install --quiet "pytest==8.3.5" "pytest-asyncio==0.25.3" "httpx==0.28.1" "websockets==15.0.1"
           python -m pytest -q -p no:cacheprovider tests
-      # Hermes ships only through its own installer (no pip wheels); pinned to v0.23.1's commit.
-      - name: Install Hermes Agent v0.23.1
+      # Hermes ships only through its own installer (no pip wheels); pinned to v0.23.2's commit.
+      - name: Install Hermes Agent v0.23.2
         run: |
           curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- \
-            --commit b65acf3fdc1d43bd889211ea8e37032974b395a5 \
+            --commit ae2a81ccc00e9b7c06301523e5bb09608397149c \
             --non-interactive --skip-browser --skip-computer-use
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Find Hermes's Python and add the test tools to it
