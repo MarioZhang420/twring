@@ -14,22 +14,22 @@ import {
   removeAiAppCopy,
   showComputerCallHint,
 } from '@/agents/ai-app';
-import { agentStatusFor, formatWhen, historyRow, protocolLabel } from '@/agents/labels';
+import { agentStatusFor, formatWhen, historyRow } from '@/agents/labels';
 import { apiErrorCopy, twringApi, type ErrorCopy } from '@/api';
 import { callAgent } from '@/call/call-agent';
 import { Avatar } from '@/components/Avatar';
+import { CallPill } from '@/components/CallPill';
 import { ComputerCallHint } from '@/components/ComputerCallHint';
 import { ErrorNotice } from '@/components/ErrorNotice';
 import { GhostButton } from '@/components/GhostButton';
 import { IconButton } from '@/components/IconButton';
-import { PrimaryButton } from '@/components/PrimaryButton';
 import { Sheet } from '@/components/Sheet';
-import { Row } from '@/components/Row';
 import { goBack, Screen } from '@/components/Screen';
+import { SettingsGroup, SettingsRow } from '@/components/SettingsGroup';
 import { StatusLabel } from '@/components/StatusLabel';
 import { useNow } from '@/hooks/useNow';
 import { STATUS_POLL_MS, useResource } from '@/hooks/useResource';
-import { radius, space, type, usePalette } from '@/theme/tokens';
+import { space, type, usePalette } from '@/theme/tokens';
 import { useChatList } from '@/threads/chats';
 
 interface Detail {
@@ -53,7 +53,6 @@ export default function AgentDetailScreen() {
   const [newVisible, setNewVisible] = useState(false);
   const [startingNew, setStartingNew] = useState(false);
   const [newError, setNewError] = useState<ErrorCopy | undefined>();
-  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const load = useCallback(
     async (signal: AbortSignal): Promise<Detail> => {
@@ -118,6 +117,8 @@ export default function AgentDetailScreen() {
   const status = agentStatusFor(agent);
   const lastCall = calls[0];
   const editable = canEditAgent(agent);
+  const offline = agent.connector_online === false || agent.connector_removed === true;
+  const canStartNew = agent.protocol === 'cord-connector' || agent.protocol === 'openai-chat';
 
   return (
     <Screen
@@ -134,47 +135,46 @@ export default function AgentDetailScreen() {
       refreshing={detail.refreshing}
       onRefresh={() => detail.reload({ refresh: true })}
     >
-      <View style={styles.hero}>
+      {detail.error !== undefined && (
+        <ErrorNotice error={detail.error} onRetry={() => detail.reload()} />
+      )}
+      {deleteError !== undefined && <ErrorNotice error={deleteError} />}
+      {clearError !== undefined && <ErrorNotice error={clearError} />}
+
+      <View style={styles.identity}>
         <Avatar
           id={agent.id}
           name={agent.name}
           avatarVersion={agent.avatar_version}
-          size={72}
+          size={56}
           online={agent.connector_online}
         />
-        <Text
-          accessibilityRole="header"
-          style={[type.screenTitle, styles.name, { color: palette.textPrimary }]}
-        >
-          {agent.name}
-        </Text>
-        <StatusLabel label={status.label} tone={status.tone} />
-        {canCall(agent) ? (
-          <View style={styles.call}>
-            <PrimaryButton
-              label="Call"
-              accessibilityHint={`Calls ${agent.name}`}
-              onPress={() => callAgent(agent)}
-            />
-          </View>
-        ) : (
-          <View style={styles.call}>
-            <Text style={[type.body, { color: palette.textSecondary, textAlign: 'center' }]}>
-              {aiAppReachability(agent.name, showComputerCallHint(agent))}
-            </Text>
-            {showComputerCallHint(agent) && <ComputerCallHint name={agent.name} />}
-            <PrimaryButton
-              label="Open chat"
-              onPress={() =>
-                router.push({ pathname: '/chats/[agentId]', params: { agentId: agent.id } })
-              }
-            />
-          </View>
+        <View style={styles.identityText}>
+          <Text
+            accessibilityRole="header"
+            numberOfLines={1}
+            style={[type.title, { color: palette.textPrimary }]}
+          >
+            {agent.name}
+          </Text>
+          <StatusLabel label={status.label} tone={status.tone} />
+        </View>
+        {canCall(agent) && (
+          <CallPill
+            accessibilityLabel={offline ? `Call ${agent.name}, offline` : `Call ${agent.name}`}
+            disabled={offline}
+            onPress={() => callAgent(agent)}
+          />
         )}
       </View>
 
-      {detail.error !== undefined && (
-        <ErrorNotice error={detail.error} onRetry={() => detail.reload()} />
+      {aiApp && (
+        <View style={styles.reach}>
+          <Text style={[type.body, { color: palette.textSecondary }]}>
+            {aiAppReachability(agent.name, showComputerCallHint(agent))}
+          </Text>
+          {showComputerCallHint(agent) && <ComputerCallHint name={agent.name} />}
+        </View>
       )}
 
       {agent.shared === true && (
@@ -184,146 +184,118 @@ export default function AgentDetailScreen() {
       )}
 
       {!aiApp && editable && (
-        <View
-          style={[styles.group, { backgroundColor: palette.surface, borderColor: palette.border }]}
-        >
-          {editable && (
-            <>
-              <Row
-                label="Voice"
-                value={voiceLabel ?? agent.voice_id}
-                accessibilityHint="Choose how this agent sounds"
-                onPress={() =>
-                  router.push({ pathname: '/agents/[id]/voice', params: { id: agent.id } })
-                }
-              />
-              <Row
-                label="Words to recognise"
-                value={keytermSummary(agent.keyterms)}
-                accessibilityHint="Add or remove names and places"
-                onPress={() =>
-                  router.push({ pathname: '/agents/[id]/words', params: { id: agent.id } })
-                }
-              />
-            </>
-          )}
-          {editable && agent.protocol !== 'mcp-app' && (
-            <Row
+        <SettingsGroup title="Settings">
+          <SettingsRow
+            label="Voice"
+            value={voiceLabel ?? agent.voice_id}
+            accessibilityHint="Choose how this agent sounds"
+            onPress={() =>
+              router.push({ pathname: '/agents/[id]/voice', params: { id: agent.id } })
+            }
+          />
+          <SettingsRow
+            label="Words to recognise"
+            value={keytermSummary(agent.keyterms)}
+            accessibilityHint="Add or remove names and places"
+            divider={agent.protocol !== 'mcp-app'}
+            onPress={() =>
+              router.push({ pathname: '/agents/[id]/words', params: { id: agent.id } })
+            }
+          />
+          {agent.protocol !== 'mcp-app' && (
+            <SettingsRow
               label="Connection"
-              value={`${status.label}${agent.last_tested_at !== undefined ? ` · tested ${formatWhen(agent.last_tested_at, now)}` : ''}\nKey: ${agent.has_credential ? 'Saved (hidden)' : 'None'}`}
+              value={`${status.label}${agent.last_tested_at !== undefined ? ` · tested ${formatWhen(agent.last_tested_at, now)}` : ''}`}
               divider={false}
             />
           )}
-        </View>
+        </SettingsGroup>
       )}
 
       {!aiApp && (
-        <Text style={[type.microLabel, styles.section, { color: palette.textTertiary }]}>
-          CALLS
-        </Text>
-      )}
-      {!aiApp && (
-        <View
-          style={[styles.group, { backgroundColor: palette.surface, borderColor: palette.border }]}
-        >
-          <Row
+        <SettingsGroup title="Calls">
+          <SettingsRow
             label="Call history"
             value={
               lastCall !== undefined
                 ? `Last call · ${formatWhen(lastCall.started_at, now)}`
                 : 'No calls yet'
             }
-            divider={false}
+            divider={calls.length > 0}
           />
-          {calls.length === 0 ? (
-            <Text style={[type.caption, styles.note, { color: palette.textTertiary }]}>
-              Your completed calls will appear here.
-            </Text>
-          ) : (
-            calls.slice(0, 5).map((call) => {
-              const row = historyRow(call, now);
-              return (
-                <View
-                  key={row.key}
-                  accessible
-                  accessibilityLabel={row.accessibilityLabel}
-                  style={styles.history}
-                >
-                  <Text style={[type.caption, { color: palette.textSecondary }]}>{row.when}</Text>
-                  <Text
-                    style={[type.caption, { color: palette.textTertiary }]}
-                  >{`${row.duration} · ${row.outcome}`}</Text>
-                </View>
-              );
-            })
-          )}
-        </View>
+          {calls.slice(0, 5).map((call) => {
+            const row = historyRow(call, now);
+            return (
+              <View
+                key={row.key}
+                accessible
+                accessibilityLabel={row.accessibilityLabel}
+                style={styles.history}
+              >
+                <Text style={[type.caption, { color: palette.textSecondary }]}>{row.when}</Text>
+                <Text
+                  style={[type.caption, { color: palette.textTertiary }]}
+                >{`${row.duration} · ${row.outcome}`}</Text>
+              </View>
+            );
+          })}
+        </SettingsGroup>
       )}
 
-      {deleteError !== undefined && <ErrorNotice error={deleteError} />}
-      {clearError !== undefined && <ErrorNotice error={clearError} />}
-      {!aiApp &&
-        (chats.available ||
-          agent.protocol === 'cord-connector' ||
-          agent.protocol === 'openai-chat') && (
-          <View style={styles.clear}>
-            {chats.available && (
-              <GhostButton label="Clear chat" tone="danger" onPress={() => setClearVisible(true)} />
-            )}
-            {(agent.protocol === 'cord-connector' || agent.protocol === 'openai-chat') && (
-              <GhostButton label="Start a new conversation" onPress={() => setNewVisible(true)} />
-            )}
-          </View>
-        )}
-      <View
-        style={[styles.group, { backgroundColor: palette.surface, borderColor: palette.border }]}
-      >
-        {!aiApp && (
-          <Row
-            label="Advanced"
-            value={showAdvanced ? 'Hide connection details' : 'Connection details'}
-            accessibilityHint={
-              showAdvanced ? 'Hides the connection details' : 'Shows how Twring reaches this agent'
-            }
-            onPress={() => setShowAdvanced(!showAdvanced)}
-          />
-        )}
-        {!aiApp && showAdvanced && (
-          <Row label="Connection method" value={protocolLabel(agent.protocol)} />
-        )}
-        {showAdvanced &&
-          editable &&
-          agent.protocol !== 'mcp-app' &&
-          agent.protocol !== 'cord-connector' && <Row label="Address" value={agent.endpoint_url} />}
-        {showAdvanced && agent.protocol === 'openai-chat' && agent.model && (
-          <Row label="Model" value={agent.model} />
-        )}
-        {showAdvanced && editable && agent.protocol !== 'mcp-app' && (
-          <Row
-            label="Edit connection"
-            accessibilityHint="Change the address or key, then test again"
-            onPress={() => router.push({ pathname: '/connect', params: { agentId: agent.id } })}
-          />
-        )}
-        {editable && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={aiApp ? `Remove ${agent.name}` : 'Delete agent'}
-            accessibilityHint="Asks before removing this agent from Twring"
-            accessibilityState={{ disabled: deleting }}
-            disabled={deleting}
-            onPress={() => confirmDelete(agent)}
-            style={({ pressed }) => [
-              styles.dangerRow,
-              { opacity: deleting ? 0.5 : pressed ? 0.6 : 1 },
-            ]}
-          >
-            <Text style={[type.body, { color: palette.danger }]}>
-              {aiApp ? `Remove ${agent.name}` : 'Delete agent'}
-            </Text>
-          </Pressable>
-        )}
-      </View>
+      {!aiApp && (chats.available || canStartNew) && (
+        <SettingsGroup title="Conversation">
+          {canStartNew && (
+            <SettingsRow
+              label="Start a new conversation"
+              accessibilityHint="Asks before starting fresh"
+              divider={chats.available}
+              onPress={() => setNewVisible(true)}
+            />
+          )}
+          {chats.available && (
+            <SettingsRow
+              label="Clear chat"
+              danger
+              accessibilityHint="Asks before deleting your messages"
+              divider={false}
+              onPress={() => setClearVisible(true)}
+            />
+          )}
+        </SettingsGroup>
+      )}
+
+      {(!aiApp || editable) && (
+        <SettingsGroup title="Advanced">
+          {!aiApp && (
+            <SettingsRow
+              label="Connection details"
+              accessibilityHint="Shows how Twring reaches this agent"
+              divider={editable}
+              onPress={() =>
+                router.push({ pathname: '/agents/[id]/connection', params: { id: agent.id } })
+              }
+            />
+          )}
+          {editable && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={aiApp ? `Remove ${agent.name}` : 'Delete agent'}
+              accessibilityHint="Asks before removing this agent from Twring"
+              accessibilityState={{ disabled: deleting }}
+              disabled={deleting}
+              onPress={() => confirmDelete(agent)}
+              style={({ pressed }) => [
+                styles.dangerRow,
+                { opacity: deleting ? 0.5 : pressed ? 0.6 : 1 },
+              ]}
+            >
+              <Text style={[type.body, { color: palette.danger }]}>
+                {aiApp ? `Remove ${agent.name}` : 'Delete agent'}
+              </Text>
+            </Pressable>
+          )}
+        </SettingsGroup>
+      )}
       <Sheet
         visible={clearVisible}
         title={`Clear chat with ${agent.name}?`}
@@ -409,10 +381,9 @@ export default function AgentDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  hero: { alignItems: 'center', gap: space.sm, paddingVertical: space.lg },
-  name: { textAlign: 'center' },
-  call: { alignSelf: 'stretch', paddingVertical: space.md },
-  group: { borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
+  identity: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  identityText: { flex: 1, gap: space.xs },
+  reach: { gap: space.sm },
   note: { paddingHorizontal: 14, paddingVertical: space.sm },
   history: {
     flexDirection: 'row',
@@ -420,13 +391,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: space.sm,
   },
-  section: { marginTop: space.sm, marginLeft: space.xs },
   dangerRow: {
     minHeight: 52,
     paddingHorizontal: 14,
     paddingVertical: 12,
     justifyContent: 'center',
   },
-  clear: { paddingVertical: space.md, gap: space.sm },
   clearSheet: { gap: 14 },
 });

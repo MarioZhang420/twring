@@ -96,6 +96,7 @@ function RootLayout() {
               <Stack.Screen name="dev-components" />
               <Stack.Screen name="agents/[id]/index" />
               <Stack.Screen name="agents/[id]/edit" />
+              <Stack.Screen name="agents/[id]/connection" />
               <Stack.Screen name="chats/[agentId]" />
               <Stack.Screen name="settings/connected-apps" />
               <Stack.Screen name="settings/feedback" />

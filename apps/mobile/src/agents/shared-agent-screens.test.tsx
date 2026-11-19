@@ -105,6 +105,7 @@ vi.mock('@/theme/tokens', () => ({
 vi.mock('@/theme/fonts', () => ({ font: {} }));
 for (const name of [
   'Avatar',
+  'CallPill',
   'ComputerCallHint',
   'ErrorNotice',
   'GhostButton',
@@ -120,6 +121,10 @@ for (const name of [
 ]) {
   vi.doMock(`@/components/${name}`, () => ({ [name]: name }));
 }
+vi.mock('@/components/SettingsGroup', () => ({
+  SettingsGroup: 'SettingsGroup',
+  SettingsRow: 'SettingsRow',
+}));
 vi.mock('@/components/Screen', () => ({ Screen: 'Screen', goBack: () => undefined }));
 
 import { SHARED_AGENT_NOTE, VIEW_ONLY_AGENT_NOTE } from './shared';
@@ -160,6 +165,7 @@ const everything = (tree: ReactElement) => JSON.stringify(tree);
 
 const screens = {
   index: () => import('../app/agents/[id]/index'),
+  connection: () => import('../app/agents/[id]/connection'),
   edit: () => import('../app/agents/[id]/edit'),
   voice: () => import('../app/agents/[id]/voice'),
   words: () => import('../app/agents/[id]/words'),
@@ -190,25 +196,35 @@ describe('agent detail screen', () => {
         'Edit agent',
         'Voice',
         'Words to recognise',
-        'Advanced',
+        'Connection details',
         'Delete agent',
       ]),
     );
     expect(everything((await screen('index'))())).not.toContain(SHARED_AGENT_NOTE);
   });
 
-  it('keeps connection details behind Advanced until it is opened', async () => {
+  it('opens connection details on their own page, not in place', async () => {
     detail({});
     const render = await screen('index');
     expect(names(render())).not.toContain('Edit connection');
-    elements(render())
-      .find((e) => e.props.label === 'Advanced')
-      ?.props.onPress?.();
-    expect(names(render())).toEqual(
-      expect.arrayContaining(['Edit connection', 'Connection method']),
-    );
+    expect(names(render())).not.toContain('Connection method');
+    expect(names(render())).toContain('Connection details');
+  });
+
+  it('the connection page shows method and Edit connection, not a computer address', async () => {
+    mocks.resource.data = agent;
+    const out = names((await screen('connection'))());
+    expect(out).toEqual(expect.arrayContaining(['Edit connection', 'Connection method', 'Key']));
     // A computer agent's internal connector address is not shown.
-    expect(names(render())).not.toContain('Address');
+    expect(out).not.toContain('Address');
+  });
+
+  it('the connection page hides Edit connection when can_edit is false', async () => {
+    mocks.resource.data = { ...agent, can_edit: false, protocol: 'openai-chat' };
+    const out = names((await screen('connection'))());
+    expect(out).toContain('Connection method');
+    expect(out).not.toContain('Edit connection');
+    expect(out).not.toContain('Address');
   });
 
   it('can_edit false hides edit, delete, voice, words and connection controls', async () => {
@@ -224,7 +240,7 @@ describe('agent detail screen', () => {
     ]) {
       expect(out).not.toContain(gone);
     }
-    expect(out).toContain('Call');
+    expect(out).toContain('Call Home agent');
     expect(everything(tree)).toContain(SHARED_AGENT_NOTE);
   });
 

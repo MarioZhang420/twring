@@ -179,6 +179,7 @@ export function RingSettings({
         <SettingsRow
           label="Notifications are off"
           value="Turn them on, or agents' calls cannot ring."
+          layout="stacked"
           accessibilityHint="Asks for permission or opens system settings"
           onPress={() => {
             void allowNotifications().then((granted) => {
@@ -191,6 +192,7 @@ export function RingSettings({
         <SettingsRow
           label="“Incoming agent calls” is muted"
           value="Turn that notification category back on."
+          layout="stacked"
           accessibilityHint="Opens system notification settings"
           onPress={() => ringPlatform.openNotificationSettings()}
         />
@@ -199,6 +201,7 @@ export function RingSettings({
         <SettingsRow
           label="Full-screen calls are off"
           value="Allow full-screen notifications so a call shows over the lock screen."
+          layout="stacked"
           accessibilityHint="Opens system settings"
           onPress={() => ringPlatform.openFullScreenIntentSettings()}
         />

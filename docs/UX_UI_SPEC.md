@@ -152,20 +152,24 @@ Never echo the saved secret.
 ## 8. Agent detail
 
 ```text
-        [Avatar]
+[<]                                   [pencil]
 
-        Operator
-   Connected agent
+[Avatar 56]  Operator                 [ Call ]
+             On your computer · Online
 
-      [ Call ]
-
-Last call · 8 min ago
-
-Voice
-Connection
-Call history
-Advanced
+SETTINGS       Voice · Words to recognise · Connection
+CALLS          Call history (last five calls)
+CONVERSATION   Start a new conversation · Clear chat
+ADVANCED       Connection details  >   · Delete agent
 ```
+
+- Header: back on the left, a pencil (edit) on the right when the user may edit the agent.
+- Identity row: avatar, name on one line, status caption, and a Call pill on the right. The pill is
+  greyed out while the computer is offline and absent for AI apps (they show how to reach them
+  instead).
+- Short values sit on the right of their row. Nothing unfolds in place: "Connection details" opens
+  its own page (connection method, address, model, key, Edit connection).
+- Errors show at the top of the content, never between rows.
 
 Do not turn this into a dense dashboard.
 
@@ -303,33 +307,22 @@ Do not auto-generate a separate Twring AI summary in V1 unless product scope exp
 
 ## 17. Call history
 
-Show:
-
-- agent;
-- date/time;
-- duration;
-- ended/failed;
-- transcript availability.
-
-Avoid sensitive transcript preview on list view by default.
+Recents: one header row (title and Twring lockup), a one-line summary caption, then rows grouped
+by day. Each row shows the agent, then "{outcome} · {time} · {duration}" (red when the call
+failed). A missed ring shows "Missed · {time}" in red with the agent's reason underneath, and a
+round Call button to call back (an AI app gets a chat button instead). No transcript is kept or
+previewed.
 
 ## 18. Settings
 
-V1:
+One header row (title and Twring lockup), then groups: account, calls (whether agents can ring
+this phone, Do not disturb, quiet hours, today's calling), language, AI apps, help, privacy and
+data, about.
 
-- account;
-- transcript retention;
-- analytics/privacy;
-- diagnostics;
-- sign out.
-
-Optional audio preferences only if stable/reliable.
-
-Future:
-
-- incoming call permissions;
-- quiet hours;
-- ring rules.
+- Short values (an email, a language, a version) sit on the right of the row; sentences sit under
+  the label.
+- Work in progress ("Deleting your data…") replaces the row's value text; it never adds a row.
+- Sign out, Delete my data and Delete account always ask first.
 
 ## 19. Error writing
 
