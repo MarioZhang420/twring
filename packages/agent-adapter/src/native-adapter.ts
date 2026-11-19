@@ -223,7 +223,8 @@ export class NativeWsAdapter implements TwringAgentAdapter {
       );
       for (;;) {
         const item = await active.queue.next();
-        if (item.kind === 'aborted') return;
+        // The abort marker queues behind events that already arrived: none of them may leak.
+        if (item.kind === 'aborted' || signal.aborted) return;
         if (item.kind === 'fail') {
           finished = true;
           throw item.error;
